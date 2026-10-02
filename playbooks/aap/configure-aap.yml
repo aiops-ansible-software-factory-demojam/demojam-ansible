@@ -1,0 +1,146 @@
+---
+- name: Configure the demo automation platform
+  hosts: aap
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Load the current Forgejo configuration data
+      ansible.builtin.include_vars:
+        dir: ../../group_vars/aap
+      no_log: true
+
+    - name: Check required runtime configuration
+      ansible.builtin.assert:
+        that:
+          - aap_hostname | length > 0
+          - aap_username | length > 0
+          - aap_password | length > 0
+          - aap_ee_image | length > 0
+          - demo_eda_event_stream.token_lookup | length > 0
+          - demo_forgejo_credentials.token_lookup | length > 0
+          - demo_vm_credentials.api_host | length > 0
+          - demo_vm_credentials.api_token_lookup | length > 0
+          - demo_vm_credentials.api_ca | length > 0
+          - demo_vm_credentials.ssh_private_lookup | length > 0
+          - demo_vm_credentials.ssh_public | length > 0
+          - demo_vm_credentials.entitlement_lookup | length > 0
+        fail_msg: Run bootstrap to supply the configuration credential documented in README.md.
+      no_log: true
+
+    # EDA's scheduled shared-resource sync can lag organization creation by 15 minutes.
+    - name: Wait for the bootstrap organization in EDA
+      block:
+        - name: Check EDA organization synchronization
+          ansible.builtin.uri:
+            url: "{{ aap_hostname }}/api/eda/v1/organizations/?name=demo"
+            method: GET
+            url_username: "{{ aap_username }}"
+            url_password: "{{ aap_password }}"
+            force_basic_auth: true
+            validate_certs: "{{ aap_validate_certs }}"
+            return_content: true
+            status_code: 200
+            timeout: 10
+          register: demo_eda_organization
+          until:
+            - demo_eda_organization.status | default(0) == 200
+            - >-
+              demo_eda_organization.json.results | default([])
+              | selectattr('name', 'equalto', 'demo') | list | length == 1
+          retries: 120
+          delay: 10
+          changed_when: false
+          no_log: true
+      rescue:
+        - name: Report EDA organization readiness failure
+          ansible.builtin.fail:
+            msg: >-
+              EDA did not expose organization demo within the readiness window.
+              Check EDA worker health and gateway shared-resource synchronization,
+              then rerun make aap-configure. No config-as-code objects were applied.
+
+    - name: Apply inventory-defined AAP objects
+      ansible.builtin.include_role:
+        name: infra.aap_configuration.dispatch
+      vars:
+        aap_configuration_secure_logging: true
+        assign_default_ee_to_org: false
+        aap_configuration_async_retries: 300
+        aap_configuration_async_delay: 2
+        # Same gateway compatibility workaround as the homelab dispatcher.
+        aap_configuration_dispatcher_exclude_roles:
+          - controller_applications
+
+    - name: Check demo identity inputs
+      ansible.builtin.assert:
+        that:
+          - demo_oidc_issuer | length > 0
+          - demo_oidc_credentials.client_secret_lookup | length > 0
+        fail_msg: Run bootstrap to supply the demo identity dispatch credential.
+      no_log: true
+
+    - name: Configure the inventory-defined OIDC authenticator
+      ansible.platform.authenticator:
+        aap_hostname: "{{ aap_hostname }}"
+        aap_username: "{{ aap_username }}"
+        aap_password: "{{ aap_password }}"
+        aap_validate_certs: true
+        name: "{{ demo_oidc_authenticator.name }}"
+        type: "{{ demo_oidc_authenticator.type }}"
+        configuration: "{{ demo_oidc_authenticator.configuration }}"
+        enabled: "{{ demo_oidc_authenticator.enabled }}"
+        create_objects: "{{ demo_oidc_authenticator.create_objects }}"
+        remove_users: "{{ demo_oidc_authenticator.remove_users }}"
+        state: present
+      no_log: true
+
+    - name: Configure the inventory-defined OIDC access mappings
+      ansible.platform.authenticator_map:
+        aap_hostname: "{{ aap_hostname }}"
+        aap_username: "{{ aap_username }}"
+        aap_password: "{{ aap_password }}"
+        aap_validate_certs: true
+        authenticator: "{{ demo_oidc_authenticator.name }}"
+        name: "{{ item.name }}"
+        map_type: "{{ item.map_type }}"
+        organization: "{{ item.organization | default(omit) }}"
+        role: "{{ item.role | default(omit) }}"
+        triggers: "{{ item.triggers }}"
+        state: present
+      loop: "{{ demo_oidc_authenticator_maps }}"
+      no_log: true
+
+    - name: Configure the authenticated webapp event stream
+      ansible.eda.event_stream:
+        controller_host: "{{ aap_hostname }}"
+        controller_username: "{{ aap_username }}"
+        controller_password: "{{ aap_password }}"
+        validate_certs: true
+        name: "{{ demo_eda_event_stream.name }}"
+        uuid: "{{ demo_eda_event_stream.uuid }}"
+        organization: demo
+        credential_name: demo-alertmanager-token
+        headers: Content-Type
+        forward_events: true
+        state: present
+      no_log: true
+
+    - name: Activate the webapp alert rulebook
+      ansible.eda.rulebook_activation:
+        controller_host: "{{ aap_hostname }}"
+        controller_username: "{{ aap_username }}"
+        controller_password: "{{ aap_password }}"
+        validate_certs: true
+        name: "{{ demo_eda_activation.name }}"
+        organization: "{{ demo_eda_activation.organization }}"
+        project: "{{ demo_eda_activation.project }}"
+        rulebook: "{{ demo_eda_activation.rulebook }}"
+        decision_environment: "{{ demo_eda_activation.decision_environment }}"
+        eda_credentials: "{{ demo_eda_activation.credentials }}"
+        event_streams:
+          - event_stream: "{{ demo_eda_event_stream.name }}"
+            source_name: "{{ demo_eda_activation.source_name }}"
+        restart_policy: on-failure
+        restart_on_project_update: true
+        state: enabled
+      no_log: true

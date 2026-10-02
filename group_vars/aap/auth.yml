@@ -1,0 +1,12 @@
+---
+# Bootstrap owns the organization, supported EE, public project, base inventory,
+# Galaxy/dispatch credentials, and aap_configure_all.
+# Resolve credentials in the inventory data layer, as in igou-inventory.
+ansible_python_interpreter: "{{ ansible_playbook_python }}"
+aap_hostname: "{{ lookup('ansible.builtin.env', 'AAP_HOST') }}"
+aap_username: "{{ lookup('ansible.builtin.env', 'AAP_USERNAME') }}"
+aap_password: "{{ lookup('ansible.builtin.env', 'AAP_PASSWORD') }}"
+aap_validate_certs: true
+aap_default_ee_image: >-
+  registry.redhat.io/ansible-automation-platform-27/ee-supported-rhel9@sha256:d97a6fc9c34132bfddf5c8f0db93a24fea67ed3db2094d15f78d7f4eba724f1f
+aap_ee_image: "{{ lookup('ansible.builtin.env', 'AAP_EE_IMAGE') | default(aap_default_ee_image, true) }}"

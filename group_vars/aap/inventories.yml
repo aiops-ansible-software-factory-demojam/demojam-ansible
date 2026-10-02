@@ -1,0 +1,30 @@
+---
+# Bootstrap owns the base demo-inventory; dispatch owns its SCM sources.
+controller_inventory_sources:
+  - name: demo-inventory-scm
+    organization: demo
+    inventory: demo-inventory
+    source: scm
+    source_project: demojam-ansible
+    source_path: inventory.yml
+    overwrite: true
+    overwrite_vars: true
+    update_on_launch: true
+    update_cache_timeout: 0
+    execution_environment: demo-aap-ee
+    wait: true
+    timeout: 900
+  - name: demo-virtualmachines
+    organization: demo
+    inventory: demo-inventory
+    source: scm
+    source_project: demojam-ansible
+    source_path: dynamic/openshift-virtualization.kubevirt.yml
+    credential: demo-virtualmachine-admin
+    execution_environment: demo-aap-ee
+    overwrite: true
+    overwrite_vars: true
+    update_on_launch: true
+    update_cache_timeout: 0
+    wait: true
+    timeout: 900

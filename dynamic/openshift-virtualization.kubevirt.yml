@@ -1,0 +1,14 @@
+---
+plugin: redhat.openshift_virtualization.kubevirt
+namespaces:
+  - automation-vms
+  - webapp-vms
+host_format: "{name}-{namespace}"
+create_groups: true
+use_service: false
+compose:
+  ansible_host: vm_annotations['demo.gitops/ssh-host']
+  ansible_port: '22'
+  ansible_user: "'cloud-user'"
+groups:
+  webapps: vm_labels.get('app.kubernetes.io/name') == 'webapp'

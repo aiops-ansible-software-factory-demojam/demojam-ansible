@@ -1,0 +1,91 @@
+---
+- name: Manage a demo OpenShift Virtualization VM
+  hosts: "{{ host | default('openshift_clusters') }}"
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Validate VM inputs
+      ansible.builtin.assert:
+        that:
+          - vm_namespace == 'automation-vms'
+          - vm_name is match('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$')
+          - vm_name | length <= 63
+          - vm_state in ['present', 'absent']
+          - vm_disk_source in ['containerdisk', 'datasource']
+          - vm_cpus | int > 0
+        fail_msg: Use a valid VM name, state, and disk source in automation-vms.
+
+    - name: Remove the VirtualMachine and its owned resources
+      redhat.openshift_virtualization.kubevirt_vm:
+        name: "{{ vm_name }}"
+        namespace: "{{ vm_namespace }}"
+        state: absent
+        delete_options:
+          propagationPolicy: Foreground
+        wait: true
+        wait_timeout: "{{ vm_wait_timeout }}"
+      when: vm_state == 'absent'
+
+    - name: Create or update the VirtualMachine
+      redhat.openshift_virtualization.kubevirt_vm:
+        name: "{{ vm_name }}"
+        namespace: "{{ vm_namespace }}"
+        state: present
+        run_strategy: Always
+        labels:
+          app.kubernetes.io/managed-by: ansible
+          app.kubernetes.io/part-of: aap-demo
+        data_volume_templates: "{{ vm_data_volume_templates if vm_disk_source == 'datasource' else omit }}"
+        spec:
+          domain:
+            cpu:
+              cores: "{{ vm_cpus }}"
+            resources:
+              requests:
+                memory: "{{ vm_memory }}"
+            devices:
+              disks:
+                - name: rootdisk
+                  disk:
+                    bus: virtio
+                - name: cloudinitdisk
+                  disk:
+                    bus: virtio
+              interfaces:
+                - name: default
+                  masquerade: {}
+          networks:
+            - name: default
+              pod: {}
+          volumes: "{{ vm_volumes[vm_disk_source] }}"
+        wait: true
+        wait_timeout: "{{ vm_wait_timeout }}"
+      vars:
+        vm_data_volume_templates:
+          - metadata:
+              name: "{{ vm_name }}-rootdisk"
+            spec:
+              sourceRef:
+                kind: DataSource
+                name: "{{ vm_datasource_name }}"
+                namespace: "{{ vm_datasource_namespace }}"
+              storage:
+                resources:
+                  requests:
+                    storage: "{{ vm_disk_size }}"
+        vm_volumes:
+          containerdisk:
+            - name: rootdisk
+              containerDisk:
+                image: "{{ vm_container_image }}"
+            - name: cloudinitdisk
+              cloudInitNoCloud:
+                userData: "{{ vm_user_data }}"
+          datasource:
+            - name: rootdisk
+              dataVolume:
+                name: "{{ vm_name }}-rootdisk"
+            - name: cloudinitdisk
+              cloudInitNoCloud:
+                userData: "{{ vm_user_data }}"
+      when: vm_state == 'present'

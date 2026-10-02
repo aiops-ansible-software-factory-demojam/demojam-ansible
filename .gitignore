@@ -1,0 +1,12 @@
+.ansible/
+.venv/
+context/
+artifacts/
+*.retry
+cluster-ca.crt
+*.log
+aap_manifest.zip
+.env
+.env.*
+!.env.example
+.secrets/

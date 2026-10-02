@@ -1,0 +1,33 @@
+---
+ansible-navigator:
+  mode: stdout
+  logging:
+    file: /dev/null
+    level: error
+  execution-environment:
+    enabled: true
+    image: registry.redhat.io/ansible-automation-platform-27/ee-supported-rhel9@sha256:d97a6fc9c34132bfddf5c8f0db93a24fea67ed3db2094d15f78d7f4eba724f1f
+    container-engine: podman
+    environment-variables:
+      pass:
+        - AAP_HOST
+        - AAP_USERNAME
+        - AAP_PASSWORD
+        - AAP_EE_IMAGE
+        - DEMO_OIDC_ISSUER
+        - DEMO_OIDC_CLIENT_SECRET
+        - DEMO_VM_API_HOST
+        - DEMO_VM_API_TOKEN
+        - DEMO_VM_API_CA
+        - DEMO_VM_SSH_PRIVATE
+        - DEMO_VM_SSH_PUBLIC
+        - DEMO_RHEL_ENTITLEMENT_FILE
+        - DEMO_EDA_WEBHOOK_TOKEN
+        - DEMO_FORGEJO_TOKEN
+        - FORGEJO_TOKEN
+        - K8S_AUTH_HOST
+        - K8S_AUTH_API_KEY
+        - AAP_K8S_CA_CERT
+        - K8S_AUTH_SSL_CA_CERT
+  playbook-artifact:
+    enable: false

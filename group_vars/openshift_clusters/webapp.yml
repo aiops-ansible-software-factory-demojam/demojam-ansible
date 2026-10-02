@@ -1,0 +1,20 @@
+---
+webapp_vm_name: webapp
+webapp_vm_namespace: webapp-vms
+webapp_vm_state: "{{ vm_state | default('present') }}"
+webapp_ssh_public_key: "{{ lookup('ansible.builtin.env', 'VM_SSH_PUBLIC_KEY') }}"
+webapp_user_data:
+  ssh_pwauth: false
+  users:
+    - name: cloud-user
+      groups: wheel
+      sudo: ALL=(ALL) NOPASSWD:ALL
+      shell: /bin/bash
+      lock_passwd: true
+      ssh_authorized_keys:
+        - "{{ webapp_ssh_public_key }}"
+  runcmd:
+    # Open only the two demo endpoints; no packages are installed by cloud-init.
+    - systemctl enable --now sshd
+    - firewall-cmd --permanent --add-service=http
+    - firewall-cmd --reload

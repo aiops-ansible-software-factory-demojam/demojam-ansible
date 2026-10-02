@@ -1,0 +1,43 @@
+---
+demo_oidc_credentials:
+  client_secret_lookup: "{{ lookup('ansible.builtin.env', 'DEMO_OIDC_CLIENT_SECRET') }}"
+demo_oidc_issuer: "{{ lookup('ansible.builtin.env', 'DEMO_OIDC_ISSUER') }}"
+demo_oidc_authenticator:
+  name: Demojam Keycloak
+  type: ansible_base.authentication.authenticator_plugins.oidc
+  configuration:
+    OIDC_ENDPOINT: "{{ demo_oidc_issuer }}"
+    KEY: aap
+    SECRET: "{{ demo_oidc_credentials.client_secret_lookup }}"
+    VERIFY_SSL: true
+    JWT_ALGORITHMS:
+      - RS256
+    GROUPS_CLAIM: groups
+    USERNAME_KEY: preferred_username
+    REDIRECT_STATE: true
+  enabled: true
+  create_objects: true
+  remove_users: true
+demo_oidc_authenticator_maps:
+  - name: Demojam Keycloak login
+    map_type: allow
+    triggers:
+      groups:
+        has_or:
+          - demo-users
+          - demo-admins
+  - name: Demojam Keycloak organization
+    map_type: organization
+    organization: demo
+    role: Organization Member
+    triggers:
+      groups:
+        has_or:
+          - demo-users
+          - demo-admins
+  - name: Demojam Keycloak administrators
+    map_type: is_superuser
+    triggers:
+      groups:
+        has_or:
+          - demo-admins

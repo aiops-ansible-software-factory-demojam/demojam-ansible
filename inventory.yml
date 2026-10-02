@@ -1,0 +1,13 @@
+---
+all:
+  children:
+    aap:
+      hosts:
+        aap_demo:
+          ansible_connection: local
+    openshift_clusters:
+      hosts:
+        demo_cluster:
+          ansible_connection: local
+    webapps:
+      hosts: {}

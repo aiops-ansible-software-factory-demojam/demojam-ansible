@@ -1,0 +1,49 @@
+---
+# A fixed UUID keeps the authenticated webhook URL declarative and stable.
+demo_eda_event_stream:
+  name: demojam-webapp-alerts
+  uuid: 8fd9b95f-6689-441a-b5cb-d7a33d64d62b
+  token_lookup: "{{ lookup('ansible.builtin.env', 'DEMO_EDA_WEBHOOK_TOKEN') }}"
+eda_credentials:
+  - name: demo-alertmanager-token
+    organization: demo
+    credential_type: Token Event Stream
+    state: present
+    inputs:
+      auth_type: token
+      http_header_key: Authorization
+      token: "{{ demo_eda_event_stream.token_lookup }}"
+  - name: demo-eda-aap
+    organization: demo
+    credential_type: Red Hat Ansible Automation Platform
+    state: present
+    inputs:
+      host: "{{ aap_hostname }}/api/controller/"
+      username: "{{ aap_username }}"
+      password: "{{ aap_password }}"
+      verify_ssl: true
+      request_timeout: "30"
+eda_projects:
+  - name: demojam-ansible
+    organization: demo
+    url: http://forgejo.forgejo.svc.cluster.local:3000/demo-owner/demojam-ansible.git
+    scm_branch: main
+    sync: true
+    state: present
+eda_decision_environments:
+  - name: demo-eda-de
+    organization: demo
+    image_url: >-
+      registry.redhat.io/ansible-automation-platform-27/de-supported-rhel9@sha256:38fb77f4e324759e09acea0e8b76a367d3318ebc1e855a4cdb5e41dcd321b25b
+    state: present
+# The event stream and activation are applied by supported modules after the
+# dispatcher, so the stream exists before its activation references it.
+demo_eda_activation:
+  name: demojam-webapp-issues
+  organization: demo
+  project: demojam-ansible
+  rulebook: webapp-alert-issue.yml
+  decision_environment: demo-eda-de
+  credentials:
+    - demo-eda-aap
+  source_name: alertmanager

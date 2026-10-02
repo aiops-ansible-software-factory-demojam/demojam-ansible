@@ -1,0 +1,95 @@
+---
+- name: Open a collection issue for a webapp availability alert
+  hosts: aap
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Load the issue destination and credential lookup
+      ansible.builtin.include_vars:
+        file: ../../group_vars/aap/webapp_issue.yml
+      no_log: true
+
+    - name: Validate the incoming Alertmanager notification
+      ansible.builtin.assert:
+        that:
+          - alert_payload is defined
+          - alert_payload is mapping
+          - alert_payload.status == 'firing'
+          - alert_payload.commonLabels.alertname == 'WebappDown'
+          - alert_payload.commonLabels.namespace == 'blackbox-exporter'
+          - alert_payload.alerts | length > 0
+          - demo_issue.credentials.token_lookup | length > 0
+      no_log: true
+
+    - name: Select the firing webapp alerts
+      ansible.builtin.set_fact:
+        demo_firing_alerts: >-
+          {{ alert_payload.alerts | selectattr('status', 'equalto', 'firing') |
+             selectattr('labels.alertname', 'equalto', 'WebappDown') |
+             selectattr('labels.namespace', 'equalto', 'blackbox-exporter') | list }}
+
+    - name: Require a firing webapp alert in the notification
+      ansible.builtin.assert:
+        that:
+          - demo_firing_alerts | length > 0
+
+    # A single non-concurrent template serializes deliveries. The first open
+    # issue with the marker is reused even when Alertmanager sends repeats.
+    - name: Read existing open outage issues
+      ansible.builtin.uri:
+        url: >-
+          {{ demo_issue.api_url }}/repos/{{ demo_issue.repository }}/issues?state=open&type=issues&limit=50&q={{ demo_issue.title | urlencode }}
+        method: GET
+        headers:
+          Authorization: "token {{ demo_issue.credentials.token_lookup }}"
+        return_content: true
+        status_code: 200
+      register: demo_open_issues
+      no_log: true
+
+    - name: Find the existing open incident
+      ansible.builtin.set_fact:
+        demo_existing_issues: >-
+          {{ demo_open_issues.json | selectattr('body', 'defined') |
+             selectattr('body', 'search', demo_issue.marker) | list }}
+      no_log: true
+
+    - name: Open an issue when no matching incident is open
+      ansible.builtin.uri:
+        url: "{{ demo_issue.api_url }}/repos/{{ demo_issue.repository }}/issues"
+        method: POST
+        headers:
+          Authorization: "token {{ demo_issue.credentials.token_lookup }}"
+        body_format: json
+        body:
+          title: "{{ demo_issue.title }}"
+          body: |
+            {{ demo_issue.marker }}
+            Blackbox exporter reports that the demo webapp is unavailable.
+
+            Alert: `WebappDown`
+            Target: `{{ demo_firing_alerts[0].labels.instance | default('webapp.webapp-vms.svc.cluster.local') }}`
+            Started: {{ demo_firing_alerts[0].startsAt | default('not supplied') }}
+            Summary: {{ demo_firing_alerts[0].annotations.summary | default('The webapp HTTP probe is failing') }}
+            Description: {{ demo_firing_alerts[0].annotations.description | default('') }}
+
+            Created by Event-Driven Ansible and AAP job `webapp_alert_issue`.
+            Inspect the webapp VM, nginx service, and demo.webapp collection.
+            Close this issue after investigating; repeat alerts reuse it while it is open.
+        status_code: 201
+      register: demo_created_issue
+      when: demo_existing_issues | length == 0
+      changed_when: true
+      no_log: true
+
+    - name: Select the incident URL
+      ansible.builtin.set_fact:
+        demo_incident_url: >-
+          {{ (demo_existing_issues | first).html_url if demo_existing_issues | length > 0
+             else demo_created_issue.json.html_url }}
+      no_log: true
+
+    - name: Publish the incident URL as a job artifact
+      ansible.builtin.set_stats:
+        data:
+          issue_url: "{{ demo_incident_url }}"

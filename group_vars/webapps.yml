@@ -1,0 +1,3 @@
+---
+ansible_user: cloud-user
+rhel_entitlement_file_lookup: "{{ lookup('ansible.builtin.env', 'RHEL_ENTITLEMENT_FILE') }}"

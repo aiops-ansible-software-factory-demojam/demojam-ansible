@@ -1,0 +1,83 @@
+---
+- name: Launch or remove the RHEL webapp VM
+  hosts: "{{ host | default('openshift_clusters') }}"
+  connection: local
+  gather_facts: false
+  vars_files:
+    - ../../group_vars/openshift_clusters/webapp.yml
+  tasks:
+    - name: Validate the demo workload inputs
+      ansible.builtin.assert:
+        that:
+          - webapp_vm_namespace == 'webapp-vms'
+          - webapp_vm_name == 'webapp'
+          - webapp_vm_state in ['present', 'absent']
+          - webapp_ssh_public_key | length > 0
+        fail_msg: Bootstrap the VM credential before launching the webapp.
+
+    - name: Remove the VM and its owned disk
+      redhat.openshift_virtualization.kubevirt_vm:
+        name: "{{ webapp_vm_name }}"
+        namespace: "{{ webapp_vm_namespace }}"
+        state: absent
+        delete_options:
+          propagationPolicy: Foreground
+        wait: true
+        wait_timeout: 900
+      when: webapp_vm_state == 'absent'
+
+    - name: Provision a RHEL 9 VM from the cluster DataSource
+      redhat.openshift_virtualization.kubevirt_vm:
+        name: "{{ webapp_vm_name }}"
+        namespace: "{{ webapp_vm_namespace }}"
+        state: present
+        run_strategy: Always
+        labels:
+          app.kubernetes.io/name: webapp
+          kubevirt.io/domain: webapp
+          app.kubernetes.io/part-of: aap-demo
+        data_volume_templates:
+          - metadata:
+              name: webapp-rootdisk
+            spec:
+              sourceRef:
+                kind: DataSource
+                name: rhel9
+                namespace: openshift-virtualization-os-images
+              storage:
+                resources:
+                  requests:
+                    storage: 30Gi
+        annotations:
+          demo.gitops/ssh-host: webapp-ssh.webapp-vms.svc.cluster.local
+        spec:
+          domain:
+            cpu:
+              cores: 1
+            resources:
+              requests:
+                memory: 2Gi
+            devices:
+              disks:
+                - name: rootdisk
+                  disk:
+                    bus: virtio
+                - name: cloudinitdisk
+                  disk:
+                    bus: virtio
+              interfaces:
+                - name: default
+                  masquerade: {}
+          networks:
+            - name: default
+              pod: {}
+          volumes:
+            - name: rootdisk
+              dataVolume:
+                name: webapp-rootdisk
+            - name: cloudinitdisk
+              cloudInitNoCloud:
+                userData: "#cloud-config\n{{ webapp_user_data | to_nice_yaml }}"
+        wait: true
+        wait_timeout: 900
+      when: webapp_vm_state == 'present'

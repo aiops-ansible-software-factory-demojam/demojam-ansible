@@ -1,0 +1,18 @@
+---
+collections:
+  # Controller sync isolates its collection cache from the image's collection path.
+  # Copy certified dependencies from ee-supported instead of downloading from Hub.
+  - name: /usr/share/ansible/collections/ansible_collections/ansible/controller
+    type: dir
+  - name: /usr/share/ansible/collections/ansible_collections/ansible/platform
+    type: dir
+  - name: /usr/share/ansible/collections/ansible_collections/ansible/hub
+    type: dir
+  - name: /usr/share/ansible/collections/ansible_collections/ansible/eda
+    type: dir
+  - name: infra.aap_configuration
+    version: 4.8.0
+    source: https://galaxy.ansible.com
+  - name: http://forgejo.forgejo.svc.cluster.local:3000/demo-owner/ansible-collection-demo.webapp.git
+    type: git
+    version: main

@@ -1,0 +1,21 @@
+---
+- name: Open a collection issue for a webapp outage
+  hosts: all
+  sources:
+    - name: alertmanager
+      ansible.eda.webhook:
+        host: 0.0.0.0
+        port: 5000
+  rules:
+    - name: Report a firing webapp availability alert
+      condition: >-
+        event.payload.status == "firing" and
+        event.payload.commonLabels.alertname == "WebappDown" and
+        event.payload.commonLabels.namespace == "blackbox-exporter"
+      action:
+        run_job_template:
+          name: webapp_alert_issue
+          organization: demo
+          job_args:
+            extra_vars:
+              alert_payload: "{{ event.payload }}"

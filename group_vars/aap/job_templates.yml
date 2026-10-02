@@ -1,0 +1,56 @@
+---
+controller_templates:
+  - name: openshift_virtualization_machine
+    description: Create or remove a demo VM in automation-vms
+    organization: demo
+    project: demojam-ansible
+    inventory: demo-inventory
+    execution_environment: demo-aap-ee
+    job_type: run
+    playbook: playbooks/openshift_virtualization/virtualmachine-manage.yml
+    credentials:
+      - demo-virtualmachine-admin
+    ask_variables_on_launch: true
+    extra_vars:
+      host: demo_cluster
+      vm_name: automation-demo
+      vm_state: present
+  - name: webapp_vm
+    description: Provision or remove the RHEL 9 webapp in webapp-vms
+    organization: demo
+    project: demojam-ansible
+    inventory: demo-inventory
+    execution_environment: demo-aap-ee
+    job_type: run
+    playbook: playbooks/openshift_virtualization/webapp-launch.yml
+    credentials:
+      - demo-virtualmachine-admin
+    ask_variables_on_launch: true
+    extra_vars:
+      host: demo_cluster
+      vm_state: present
+  - name: webapp_nginx
+    description: Install nginx using the example collection on discovered webapp VMs
+    organization: demo
+    project: demojam-ansible
+    inventory: demo-inventory
+    execution_environment: demo-aap-ee
+    job_type: run
+    playbook: playbooks/webapp/nginx-install.yml
+    credentials:
+      - demo-webapp-ssh
+      - demo-rhel-entitlement
+    become_enabled: true
+    ask_variables_on_launch: false
+  - name: webapp_alert_issue
+    description: Open one collection issue for a firing blackbox webapp alert
+    organization: demo
+    project: demojam-ansible
+    inventory: demo-inventory
+    execution_environment: demo-aap-ee
+    job_type: run
+    playbook: playbooks/monitoring/webapp-alert-issue.yml
+    credentials:
+      - demo-forgejo-issues
+    ask_variables_on_launch: true
+    allow_simultaneous: false

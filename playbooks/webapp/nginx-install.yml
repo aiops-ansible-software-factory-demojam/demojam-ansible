@@ -1,0 +1,58 @@
+---
+- name: Install nginx on the demo RHEL webapp
+  hosts: webapps
+  become: true
+  gather_facts: false
+  vars_files:
+    - ../../group_vars/webapps.yml
+  pre_tasks:
+    - name: Wait for cloud-init SSH access
+      ansible.builtin.wait_for_connection:
+        timeout: 600
+
+    - name: Gather the guest operating system facts
+      ansible.builtin.setup:
+
+    - name: Require RHEL 9 and its runtime entitlement
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['distribution'] == 'RedHat'
+          - ansible_facts['distribution_major_version'] == '9'
+          - rhel_entitlement_file_lookup | length > 0
+
+    - name: Install the manifest's CDN entitlement
+      ansible.builtin.copy:
+        src: "{{ rhel_entitlement_file_lookup }}"
+        dest: /etc/pki/entitlement/aap-demo.pem
+        owner: root
+        group: root
+        mode: '0600'
+      no_log: true
+
+    - name: Enable the entitled RHEL 9 package repositories
+      ansible.builtin.yum_repository:
+        name: "aap-demo-{{ item }}"
+        description: "RHEL 9 {{ item }} for the AAP demo"
+        baseurl: "https://cdn.redhat.com/content/dist/rhel9/9/$basearch/{{ item }}/os"
+        enabled: true
+        gpgcheck: true
+        gpgkey: file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+        sslverify: true
+        sslcacert: /etc/rhsm/ca/redhat-uep.pem
+        sslclientcert: /etc/pki/entitlement/aap-demo.pem
+        sslclientkey: /etc/pki/entitlement/aap-demo.pem
+        state: present
+      loop:
+        - baseos
+        - appstream
+  roles:
+    - role: demo.webapp.nginx
+  tasks:
+    - name: Check nginx serves HTTP inside the guest
+      ansible.builtin.uri:
+        url: http://127.0.0.1/
+        status_code: 200
+      register: webapp_http
+      until: webapp_http.status == 200
+      retries: 12
+      delay: 5

@@ -1,0 +1,10 @@
+---
+# This job runs on the local aap inventory host. Event data cannot change its
+# repository or API endpoint.
+demo_issue:
+  api_url: http://forgejo.forgejo.svc.cluster.local:3000/api/v1
+  repository: demo-owner/ansible-collection-demo.webapp
+  title: "[WebappDown] Demo webapp is unavailable"
+  marker: "<!-- demojam-webapp-outage -->"
+  credentials:
+    token_lookup: "{{ lookup('ansible.builtin.env', 'FORGEJO_API_TOKEN') }}"
