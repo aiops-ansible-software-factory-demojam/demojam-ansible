@@ -32,6 +32,7 @@
             {
               'issue_number': forego_issue_number | default(None),
               'alert_payload': alert_payload | default(None),
+              'check_audit_service_issue': check_audit_service_issue | default(None),
             } | dict2items | rejectattr('value', 'none') | items2dict
           }}
         status_code: 202
