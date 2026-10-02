@@ -3,10 +3,6 @@
   hosts: localhost
   gather_facts: false
 
-  vars:
-    ao_webhook_base_url:
-    ao_webhook_path:
-
   tasks:
 
     - name: Obtain OAuth token

@@ -19,3 +19,4 @@
           job_args:
             extra_vars:
               alert_payload: "{{ event.payload }}"
+              ao_webhook_path: "alertmanagealert"
