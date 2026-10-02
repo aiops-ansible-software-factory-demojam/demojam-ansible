@@ -1,0 +1,23 @@
+---
+- name: Gather Logs from impacted host
+  hosts: webapps
+  gather_facts: false
+
+  vars:
+    check_audit_service_issue: nginx
+
+  tasks:
+
+    - name: Retrieve last 20 nginx-related audit log entries
+      ansible.builtin.shell:
+        cmd: set -o pipefail && grep {{ check_audit_service_issue }} /var/log/audit/audit.log | tail -20
+        executable: /bin/bash
+      register: check_audit_service_logs
+      changed_when: false
+      failed_when: false
+
+    - name: Set stats for next controller job
+      ansible.builtin.set_stats:
+        data:
+          affected_host_log_output: "\"{{ check_audit_service_logs.stdout }}\""
+          max_tokens: 2000
