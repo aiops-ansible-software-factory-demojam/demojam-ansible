@@ -77,3 +77,15 @@ controller_templates:
     credentials:
       - demo-automation-orchestrator-service-account
     ask_variables_on_launch: true
+  - name: webapp_selinux_enable
+    description: Set SELinux to enforcing on discovered webapp VMs
+    organization: demo
+    project: demojam-ansible
+    inventory: demo-inventory
+    execution_environment: demo-aap-ee
+    job_type: run
+    playbook: playbooks/webapp/selinux-enforce.yml
+    credentials:
+      - demo-webapp-ssh
+    become_enabled: true
+    ask_variables_on_launch: false
