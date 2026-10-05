@@ -54,3 +54,38 @@ controller_templates:
       - demo-forgejo-issues
     ask_variables_on_launch: true
     allow_simultaneous: false
+  - name: pull_audit_logs
+    description: Retrieve recent nginx-related audit log entries from the impacted webapp host
+    organization: demo
+    project: demojam-ansible
+    inventory: demo-inventory
+    execution_environment: demo-aap-ee
+    job_type: run
+    playbook: playbooks/auditlogs/pull-audit-logs.yml
+    credentials:
+      - demo-webapp-ssh
+    become_enabled: true
+    ask_variables_on_launch: true
+  - name: call_ao_webhook
+    description: Exchange the Automation Orchestrator service account credentials and trigger the EDA webhook
+    organization: demo
+    project: demojam-ansible
+    inventory: demo-inventory
+    execution_environment: demo-aap-ee
+    job_type: run
+    playbook: playbooks/ao/call-ao-webhook.yml
+    credentials:
+      - demo-automation-orchestrator-service-account
+    ask_variables_on_launch: true
+  - name: webapp_selinux_enable
+    description: Set SELinux to enforcing on discovered webapp VMs
+    organization: demo
+    project: demojam-ansible
+    inventory: demo-inventory
+    execution_environment: demo-aap-ee
+    job_type: run
+    playbook: playbooks/webapp/selinux-enforce.yml
+    credentials:
+      - demo-webapp-ssh
+    become_enabled: true
+    ask_variables_on_launch: false

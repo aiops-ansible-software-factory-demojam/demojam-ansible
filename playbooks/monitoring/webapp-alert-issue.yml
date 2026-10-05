@@ -72,6 +72,7 @@
             Started: {{ demo_firing_alerts[0].startsAt | default('not supplied') }}
             Summary: {{ demo_firing_alerts[0].annotations.summary | default('The webapp HTTP probe is failing') }}
             Description: {{ demo_firing_alerts[0].annotations.description | default('') }}
+            Root Cause: {{ affected_host_log_output | default('') }}
 
             Created by Event-Driven Ansible and AAP job `webapp_alert_issue`.
             Inspect the webapp VM, nginx service, and demo.webapp collection.

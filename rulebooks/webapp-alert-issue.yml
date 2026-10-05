@@ -14,8 +14,10 @@
         event.payload.commonLabels.namespace == "blackbox-exporter"
       action:
         run_job_template:
-          name: webapp_alert_issue
+          name: webapp_alert_issue_to_ao
           organization: demo
           job_args:
             extra_vars:
               alert_payload: "{{ event.payload }}"
+              ao_webhook_path: "alertmanagealert"
+              check_audit_service_issue: "nginx"
