@@ -125,8 +125,13 @@ UUID and activation source mapping after dispatch. Project updates restart the
 activation so updated rulebooks take effect.
 
 `rulebooks/webapp-alert-issue.yml` accepts firing `WebappDown` notifications
-from `blackbox-exporter` and starts `webapp_alert_issue`. The destination is
-fixed in `group_vars/aap/webapp_issue.yml`: Forgejo collection repository
+from `blackbox-exporter` and starts `call_ao_webhook` with the original alert
+payload. Its AO service-account credential authenticates the call to the
+`alertmanagealert` trigger. AO runs `pull_audit_logs`, asks the configured model
+for a diagnosis, then launches `webapp_alert_issue` with the alert and diagnosis.
+The workflow and the policy allowing AAP to reach AO are in openshift-gitops.
+
+The issue destination is fixed in `group_vars/aap/webapp_issue.yml`: Forgejo collection repository
 `demo-owner/ansible-collection-demo.webapp`. Its credential injects `FORGEJO_API_TOKEN`
 only into the issue job. Existing open outage issues are reused; template
 execution is serialized. Resolved notifications do not close issues.

@@ -20,6 +20,7 @@
           client_secret: "{{ ao_webhook_client_secret }}"
         status_code: 200
       register: token_response
+      no_log: true
 
     - name: Post event payload to Event-Driven Ansible trigger endpoint
       ansible.builtin.uri:
@@ -40,6 +41,7 @@
           }}
         status_code: 202
       register: webhook_response
+      no_log: true
 
     - name: Display execution ID
       ansible.builtin.debug:
