@@ -3,6 +3,9 @@
   hosts: localhost
   gather_facts: false
 
+  vars:
+    ao_webhook_base_url: http://automation-orchestrator-ui.automation-orchestrator.svc.cluster.local
+
   tasks:
 
     - name: Obtain OAuth token
