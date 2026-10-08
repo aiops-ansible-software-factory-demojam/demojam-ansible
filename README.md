@@ -49,7 +49,7 @@ The dispatch credential provides `AAP_HOST`, `AAP_USERNAME`, `AAP_PASSWORD`,
 `AAP_EE_IMAGE`, `DEMO_OIDC_ISSUER`, `DEMO_OIDC_CLIENT_SECRET`, `DEMO_VM_API_HOST`,
 `DEMO_VM_API_TOKEN`, `DEMO_VM_API_CA`, `DEMO_VM_SSH_PRIVATE`,
 `DEMO_VM_SSH_PUBLIC`, `DEMO_RHEL_ENTITLEMENT_FILE`, `DEMO_EDA_WEBHOOK_TOKEN`,
-and `DEMO_FORGEJO_TOKEN`. The entitlement is injected as a private file to avoid process environment size
+`DEMO_FORGEJO_EDA_WEBHOOK_TOKEN`, and `DEMO_FORGEJO_TOKEN`. The entitlement is injected as a private file to avoid process environment size
 limits. These inputs are required;
 missing material fails before any AAP objects are changed.
 
@@ -135,3 +135,23 @@ The issue destination is fixed in `group_vars/aap/webapp_issue.yml`: Forgejo col
 `demo-owner/ansible-collection-demo.webapp`. Its credential injects `FORGEJO_API_TOKEN`
 only into the issue job. Existing open outage issues are reused; template
 execution is serialized. Resolved notifications do not close issues.
+
+## Incident remediation
+
+Bootstrap also configures a separate authenticated Forgejo event stream and
+the `forgejo-issue-remediation.yml` rulebook. The repository's issue webhook
+reaches this listener using its own token. Only newly opened, open incidents
+in the fixed collection repository with the outage marker and RCA match.
+Edits, comments, starter issues, closed/reopened issues, and PRs are ignored.
+
+The rulebook launches `call_ao_webhook` with `issue_number` and
+`ao_webhook_path: forgejo-issue-remediation`. That job publishes
+`ao_execution_id`. AO prepares the issue branch through Backstage and feeds
+the complete issue and RCA into an Omnigent session. The coding agent preserves
+SELinux enforcing, implements and tests the collection fix, and submits a PR;
+merge and application rollout require review.
+
+Both event streams have fixed UUIDs, persistent independent credentials, and
+activation readiness checks. All bootstrap logic, hook registration, model
+selection, and workflow publication live in openshift-gitops' existing
+`bootstrap/bootstrap.sh`. Run that entry point to set up the whole demo.

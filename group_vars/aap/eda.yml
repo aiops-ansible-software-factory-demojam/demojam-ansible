@@ -4,6 +4,19 @@ demo_eda_event_stream:
   name: demojam-webapp-alerts
   uuid: 8fd9b95f-6689-441a-b5cb-d7a33d64d62b
   token_lookup: "{{ lookup('ansible.builtin.env', 'DEMO_EDA_WEBHOOK_TOKEN') }}"
+demo_forgejo_event_stream:
+  name: demojam-forgejo-issues
+  uuid: 5c4c8fad-7d63-4359-83e4-73cdd752b543
+  token_lookup: "{{ lookup('ansible.builtin.env', 'DEMO_FORGEJO_EDA_WEBHOOK_TOKEN') }}"
+demo_eda_event_streams:
+  - name: "{{ demo_eda_event_stream.name }}"
+    uuid: "{{ demo_eda_event_stream.uuid }}"
+    credential: demo-alertmanager-token
+    headers: Content-Type
+  - name: "{{ demo_forgejo_event_stream.name }}"
+    uuid: "{{ demo_forgejo_event_stream.uuid }}"
+    credential: demo-forgejo-webhook-token
+    headers: Content-Type,X-Forgejo-Event,X-Forgejo-Delivery
 eda_credentials:
   - name: demo-alertmanager-token
     organization: demo
@@ -13,6 +26,14 @@ eda_credentials:
       auth_type: token
       http_header_key: Authorization
       token: "{{ demo_eda_event_stream.token_lookup }}"
+  - name: demo-forgejo-webhook-token
+    organization: demo
+    credential_type: Token Event Stream
+    state: present
+    inputs:
+      auth_type: token
+      http_header_key: Authorization
+      token: "{{ demo_forgejo_event_stream.token_lookup }}"
   - name: demo-eda-aap
     organization: demo
     credential_type: Red Hat Ansible Automation Platform
@@ -47,3 +68,15 @@ demo_eda_activation:
   credentials:
     - demo-eda-aap
   source_name: alertmanager
+demo_forgejo_activation:
+  name: demojam-forgejo-remediation
+  organization: demo
+  project: demojam-ansible
+  rulebook: forgejo-issue-remediation.yml
+  decision_environment: demo-eda-de
+  credentials:
+    - demo-eda-aap
+  source_name: forgejo
+demo_eda_activations:
+  - "{{ demo_eda_activation | combine({'event_stream': demo_eda_event_stream.name}) }}"
+  - "{{ demo_forgejo_activation | combine({'event_stream': demo_forgejo_event_stream.name}) }}"
