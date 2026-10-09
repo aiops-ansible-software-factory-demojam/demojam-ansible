@@ -73,13 +73,22 @@ job template's execution permission.
 
 ## Launch and automate the RHEL webapp
 
-In AAP, launch **webapp_vm**, then **webapp_nginx**. The first clones the
+For initial demo setup in AAP, launch **webapp_vm**,
+**webapp_selinux_permissive**, then **webapp_nginx**. Bootstrap runs these
+jobs in that order. The VM job clones the
 cluster's `rhel9` DataSource into `webapp-vms` and adds the generated public
-SSH key through cloud-init. The second refreshes discovery, waits for SSH,
+SSH key through cloud-init. The separate setup playbook waits for SSH and
+sets SELinux to Permissive so the unfixed collection can serve HTTP.
+The nginx job refreshes discovery, waits for SSH,
 enables the entitled RHEL 9 BaseOS/AppStream repositories, and uses
 `demo.webapp.nginx` from the public example collection. Controller installs
 that collection from `requirements.yml` on project synchronization;
 No Galaxy upload is required.
+
+The nginx installation playbook and base collection leave the SELinux mode
+unchanged. After **webapp_selinux_enable** triggers the outage, merge the
+tested collection fix and launch **webapp_nginx** once to deploy it with
+SELinux still Enforcing. Do not run the permissive setup job during recovery.
 
 VM inventory queries only `automation-vms` and `webapp-vms`. The webapp is
 `webapp-webapp-vms` in group `webapps`; its SSH hostname is the internal Service.
@@ -90,6 +99,7 @@ From openshift-gitops, the corresponding commands are:
 
 ```bash
 make webapp-create
+bash bootstrap/bootstrap.sh aap launch webapp_selinux_permissive
 make webapp-nginx
 make webapp-verify
 make webapp-delete
