@@ -1,0 +1,15 @@
+---
+- name: Prepare the permissive webapp demo baseline
+  hosts: webapps
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Wait for cloud-init SSH access
+      ansible.builtin.wait_for_connection:
+        timeout: 600
+
+    - name: Set SELinux to permissive for demo setup
+      ansible.posix.selinux:
+        policy: targeted
+        state: permissive

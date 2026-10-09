@@ -29,6 +29,18 @@ controller_templates:
     extra_vars:
       host: demo_cluster
       vm_state: present
+  - name: webapp_selinux_permissive
+    description: Prepare the permissive demo baseline after provisioning the webapp VM
+    organization: demo
+    project: demojam-ansible
+    inventory: demo-inventory
+    execution_environment: demo-aap-ee
+    job_type: run
+    playbook: playbooks/webapp/selinux-permissive.yml
+    credentials:
+      - demo-webapp-ssh
+    become_enabled: true
+    ask_variables_on_launch: false
   - name: webapp_nginx
     description: Install nginx using the example collection on discovered webapp VMs
     organization: demo

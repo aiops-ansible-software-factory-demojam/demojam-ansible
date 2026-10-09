@@ -49,7 +49,7 @@ The dispatch credential provides `AAP_HOST`, `AAP_USERNAME`, `AAP_PASSWORD`,
 `AAP_EE_IMAGE`, `DEMO_OIDC_ISSUER`, `DEMO_OIDC_CLIENT_SECRET`, `DEMO_VM_API_HOST`,
 `DEMO_VM_API_TOKEN`, `DEMO_VM_API_CA`, `DEMO_VM_SSH_PRIVATE`,
 `DEMO_VM_SSH_PUBLIC`, `DEMO_RHEL_ENTITLEMENT_FILE`, `DEMO_EDA_WEBHOOK_TOKEN`,
-and `DEMO_FORGEJO_TOKEN`. The entitlement is injected as a private file to avoid process environment size
+`DEMO_FORGEJO_EDA_WEBHOOK_TOKEN`, and `DEMO_FORGEJO_TOKEN`. The entitlement is injected as a private file to avoid process environment size
 limits. These inputs are required;
 missing material fails before any AAP objects are changed.
 
@@ -73,13 +73,22 @@ job template's execution permission.
 
 ## Launch and automate the RHEL webapp
 
-In AAP, launch **webapp_vm**, then **webapp_nginx**. The first clones the
+For initial demo setup in AAP, launch **webapp_vm**,
+**webapp_selinux_permissive**, then **webapp_nginx**. Bootstrap runs these
+jobs in that order. The VM job clones the
 cluster's `rhel9` DataSource into `webapp-vms` and adds the generated public
-SSH key through cloud-init. The second refreshes discovery, waits for SSH,
+SSH key through cloud-init. The separate setup playbook waits for SSH and
+sets SELinux to Permissive so the unfixed collection can serve HTTP.
+The nginx job refreshes discovery, waits for SSH,
 enables the entitled RHEL 9 BaseOS/AppStream repositories, and uses
 `demo.webapp.nginx` from the public example collection. Controller installs
 that collection from `requirements.yml` on project synchronization;
 No Galaxy upload is required.
+
+The nginx installation playbook and base collection leave the SELinux mode
+unchanged. After **webapp_selinux_enable** triggers the outage, merge the
+tested collection fix and launch **webapp_nginx** once to deploy it with
+SELinux still Enforcing. Do not run the permissive setup job during recovery.
 
 VM inventory queries only `automation-vms` and `webapp-vms`. The webapp is
 `webapp-webapp-vms` in group `webapps`; its SSH hostname is the internal Service.
@@ -90,6 +99,7 @@ From openshift-gitops, the corresponding commands are:
 
 ```bash
 make webapp-create
+bash bootstrap/bootstrap.sh aap launch webapp_selinux_permissive
 make webapp-nginx
 make webapp-verify
 make webapp-delete
@@ -135,3 +145,23 @@ The issue destination is fixed in `group_vars/aap/webapp_issue.yml`: Forgejo col
 `demo-owner/ansible-collection-demo.webapp`. Its credential injects `FORGEJO_API_TOKEN`
 only into the issue job. Existing open outage issues are reused; template
 execution is serialized. Resolved notifications do not close issues.
+
+## Incident remediation
+
+Bootstrap also configures a separate authenticated Forgejo event stream and
+the `forgejo-issue-remediation.yml` rulebook. The repository's issue webhook
+reaches this listener using its own token. Only newly opened, open incidents
+in the fixed collection repository with the outage marker and RCA match.
+Edits, comments, starter issues, closed/reopened issues, and PRs are ignored.
+
+The rulebook launches `call_ao_webhook` with `issue_number` and
+`ao_webhook_path: forgejo-issue-remediation`. That job publishes
+`ao_execution_id`. AO prepares the issue branch through Backstage and feeds
+the complete issue and RCA into an Omnigent session. The coding agent preserves
+SELinux enforcing, implements and tests the collection fix, and submits a PR;
+merge and application rollout require review.
+
+Both event streams have fixed UUIDs, persistent independent credentials, and
+activation readiness checks. All bootstrap logic, hook registration, model
+selection, and workflow publication live in openshift-gitops' existing
+`bootstrap/bootstrap.sh`. Run that entry point to set up the whole demo.

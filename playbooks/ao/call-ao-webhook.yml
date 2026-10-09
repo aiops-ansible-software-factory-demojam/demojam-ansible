@@ -34,7 +34,7 @@
         body: >-
           {{
             {
-              'issue_number': forego_issue_number | default(None),
+              'issue_number': issue_number | default(forego_issue_number | default(None)),
               'alert_payload': alert_payload | default(None),
               'check_audit_service_issue': check_audit_service_issue | default(None),
             } | dict2items | rejectattr('value', 'none') | items2dict
@@ -46,3 +46,8 @@
     - name: Display execution ID
       ansible.builtin.debug:
         msg: "Workflow execution started: {{ webhook_response.json.execution_id }}"
+
+    - name: Publish the workflow execution as a job artifact
+      ansible.builtin.set_stats:
+        data:
+          ao_execution_id: "{{ webhook_response.json.execution_id }}"
