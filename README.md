@@ -90,7 +90,7 @@ unchanged. After **webapp_selinux_enable** triggers the outage, merge the
 tested collection fix and launch **webapp_nginx** once to deploy it with
 SELinux still Enforcing. Do not run the permissive setup job during recovery.
 
-VM inventory queries only `automation-vms` and `webapp-vms`. The webapp is
+CNV inventory queries only `automation-vms` and `webapp-vms`. The webapp is
 `webapp-webapp-vms` in group `webapps`; its SSH hostname is the internal Service.
 GitOps owns the HTTP/SSH Services, HTTPS Route and blackbox probe. The probe
 becomes healthy once nginx serves HTTP. No automatic CI or schedule is added.
@@ -113,7 +113,7 @@ The SSH key and API token are runtime demo credentials preserved by reruns.
 
 ## Generic VM example
 
-The **openshift_virtualization_machine** template remains available for
+In CNV mode, the **openshift_virtualization_machine** template remains available for
 CirrOS/Fedora examples in `automation-vms`, with `host: demo_cluster` and
 `vm_state: present` or `absent`. It is separate from the fixed RHEL webapp.
 
@@ -121,9 +121,9 @@ CirrOS/Fedora examples in `automation-vms`, with `host: demo_cluster` and
 
 `make demo-reset` in openshift-gitops wipes Forgejo and developer-agent
 sessions, then seeds this starting config and the README feature issue.
-It preserves AAP runtime credentials and existing VMs. Delete the webapp
-first when testing fresh provisioning, then reset, bootstrap, and launch it
-again. Normal hydration preserves user commits; config changes must be pushed
+It removes the monitored guest and disposable test guests while preserving AAP
+and runtime credentials. Run bootstrap afterward to restore the permissive
+unfixed baseline. AWS also preserves its network and selected images. Normal hydration preserves user commits; config changes must be pushed
 to Forgejo before dispatch. Manifest ZIPs and `.env` files are excluded from
 fixture snapshots.
 
@@ -159,7 +159,7 @@ The rulebook launches `call_ao_webhook` with `issue_number` and
 `ao_execution_id`. AO prepares the issue branch through Backstage and feeds
 the complete issue and RCA into an Omnigent session. The coding agent preserves
 SELinux enforcing, implements and tests the collection fix, and submits a PR;
-merge and application rollout require review.
+a human merges after tests pass and launches one recovery job.
 
 Both event streams have fixed UUIDs, persistent independent credentials, and
 activation readiness checks. All bootstrap logic, hook registration, model
