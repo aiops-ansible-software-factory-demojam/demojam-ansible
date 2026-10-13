@@ -83,20 +83,20 @@
         - name: Publish the guest endpoints for the existing Services
           kubernetes.core.k8s:
             state: present
-            definition:
+            definition: |
               apiVersion: discovery.k8s.io/v1
               kind: EndpointSlice
               metadata:
-                name: "{{ item.name }}-aws"
+                name: {{ item.name }}-aws
                 namespace: webapp-vms
                 labels:
-                  kubernetes.io/service-name: "{{ item.name }}"
+                  kubernetes.io/service-name: {{ item.name }}
                   endpointslice.kubernetes.io/managed-by: demojam-aap
               addressType: IPv4
               ports:
-                - name: "{{ item.port_name }}"
+                - name: {{ item.port_name }}
                   protocol: TCP
-                  port: "{{ item.port }}"
+                  port: {{ item.port }}
               endpoints:
                 - addresses: ["{{ webapp_aws_guest.instances[0].public_ip_address }}"]
                   conditions:
