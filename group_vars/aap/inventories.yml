@@ -19,8 +19,8 @@ controller_inventory_sources:
     inventory: demo-inventory
     source: scm
     source_project: demojam-ansible
-    source_path: dynamic/openshift-virtualization.kubevirt.yml
-    credential: demo-virtualmachine-admin
+    source_path: "{{ 'dynamic/webapp.aws_ec2.yml' if demo_backend == 'aws' else 'dynamic/openshift-virtualization.kubevirt.yml' }}"
+    credential: "{{ 'demo-aws-guest' if demo_backend == 'aws' else 'demo-virtualmachine-admin' }}"
     execution_environment: demo-aap-ee
     overwrite: true
     overwrite_vars: true

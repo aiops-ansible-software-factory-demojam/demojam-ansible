@@ -24,7 +24,11 @@
           - demo_vm_credentials.api_ca | length > 0
           - demo_vm_credentials.ssh_private_lookup | length > 0
           - demo_vm_credentials.ssh_public | length > 0
-          - demo_vm_credentials.entitlement_lookup | length > 0
+          - demo_backend in ['cnv', 'aws']
+          - demo_backend == 'aws' or demo_vm_credentials.entitlement_lookup | length > 0
+          - demo_backend == 'cnv' or demo_aws_credentials.access_key_id_lookup | length > 0
+          - demo_backend == 'cnv' or demo_aws_credentials.secret_access_key_lookup | length > 0
+          - demo_backend == 'cnv' or demo_aws_credentials.guest_config | length > 0
         fail_msg: Run bootstrap to supply the configuration credential documented in README.md.
       no_log: true
 

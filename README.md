@@ -30,10 +30,10 @@ after populating its root `.env` and supplying `aap_manifest.zip`.
 There is no custom AAP image build or Automation Hub token. Root `requirements.yml`
 installs `infra.aap_configuration` from public Galaxy and `demo.webapp` from
 public Forgejo Git on project updates. Controller's isolated collection cache
-cannot see the supported image's collection path during installation, so four
+cannot see the supported image's collection path during installation, so
 `type: dir` entries copy CaC's certified dependencies from that image into the
 cache. They require no downloads or Hub authentication. The supported image
-already contains the Virtualization collection and required Python/system packages.
+already contains the Virtualization and AWS collections and the required Python/system packages.
 
 SCM and Git collection URLs use `http://forgejo.forgejo.svc.cluster.local:3000`.
 They are reachable from AAP project updates and execution pods, without
@@ -165,3 +165,23 @@ Both event streams have fixed UUIDs, persistent independent credentials, and
 activation readiness checks. All bootstrap logic, hook registration, model
 selection, and workflow publication live in openshift-gitops' existing
 `bootstrap/bootstrap.sh`. Run that entry point to set up the whole demo.
+
+## AWS guests
+
+Bootstrap selects `DEMO_BACKEND=aws` in the dispatch credential. Config-as-code
+keeps the same `webapp_vm`, setup, fault and recovery job names. `webapp_vm`
+uses `playbooks/aws/webapp-launch.yml` to manage one deployment-tagged RHEL 9
+EC2 instance and updates the EndpointSlices behind the existing webapp Services.
+The AWS inventory discovers only running guests with that deployment ID and
+purpose `webapp`; SSH uses the public address and `ec2-user`.
+
+AWS jobs receive the bootstrap-created AAP key through `demo-aws-guest`.
+The bootstrap root/admin key is never supplied to AAP. The dispatch credential
+carries `DEMO_AWS_ACCESS_KEY_ID`, `DEMO_AWS_SECRET_ACCESS_KEY`, `DEMO_AWS_REGION`
+and the saved nonsecret guest settings in `DEMO_AWS_CONFIG`. AWS nginx jobs use
+the AMI's RHUI repositories and omit the workshop CDN entitlement setup.
+The generic CNV job is registered only for CNV deployments.
+
+Both backends provision first, run the separate permissive setup job, and then
+install the unfixed collection. Recovery remains one `webapp_nginx` launch
+after a test-gated merge, with SELinux still enforcing.

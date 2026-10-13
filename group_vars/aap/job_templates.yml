@@ -1,5 +1,8 @@
 ---
-controller_templates:
+controller_templates: >-
+  {{ demo_controller_templates | rejectattr('name', 'equalto', 'openshift_virtualization_machine') | list
+     if demo_backend == 'aws' else demo_controller_templates }}
+demo_controller_templates:
   - name: openshift_virtualization_machine
     description: Create or remove a demo VM in automation-vms
     organization: demo
@@ -22,9 +25,8 @@ controller_templates:
     inventory: demo-inventory
     execution_environment: demo-aap-ee
     job_type: run
-    playbook: playbooks/openshift_virtualization/webapp-launch.yml
-    credentials:
-      - demo-virtualmachine-admin
+    playbook: "{{ 'playbooks/aws/webapp-launch.yml' if demo_backend == 'aws' else 'playbooks/openshift_virtualization/webapp-launch.yml' }}"
+    credentials: "{{ ['demo-virtualmachine-admin', 'demo-aws-guest'] if demo_backend == 'aws' else ['demo-virtualmachine-admin'] }}"
     ask_variables_on_launch: true
     extra_vars:
       host: demo_cluster
@@ -39,6 +41,8 @@ controller_templates:
     playbook: playbooks/webapp/selinux-permissive.yml
     credentials:
       - demo-webapp-ssh
+    extra_vars:
+      demo_backend: "{{ demo_backend }}"
     become_enabled: true
     ask_variables_on_launch: false
   - name: webapp_nginx
@@ -49,9 +53,9 @@ controller_templates:
     execution_environment: demo-aap-ee
     job_type: run
     playbook: playbooks/webapp/nginx-install.yml
-    credentials:
-      - demo-webapp-ssh
-      - demo-rhel-entitlement
+    credentials: "{{ ['demo-webapp-ssh'] if demo_backend == 'aws' else ['demo-webapp-ssh', 'demo-rhel-entitlement'] }}"
+    extra_vars:
+      demo_backend: "{{ demo_backend }}"
     become_enabled: true
     ask_variables_on_launch: false
   - name: webapp_alert_issue
@@ -76,6 +80,8 @@ controller_templates:
     playbook: playbooks/auditlogs/pull-audit-logs.yml
     credentials:
       - demo-webapp-ssh
+    extra_vars:
+      demo_backend: "{{ demo_backend }}"
     become_enabled: true
     ask_variables_on_launch: true
   - name: call_ao_webhook
@@ -99,5 +105,7 @@ controller_templates:
     playbook: playbooks/webapp/selinux-enforce.yml
     credentials:
       - demo-webapp-ssh
+    extra_vars:
+      demo_backend: "{{ demo_backend }}"
     become_enabled: true
     ask_variables_on_launch: false

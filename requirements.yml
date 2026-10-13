@@ -10,6 +10,8 @@ collections:
     type: dir
   - name: /usr/share/ansible/collections/ansible_collections/ansible/eda
     type: dir
+  - name: /usr/share/ansible/collections/ansible_collections/amazon/aws
+    type: dir
   - name: infra.aap_configuration
     version: 4.8.0
     source: https://galaxy.ansible.com
