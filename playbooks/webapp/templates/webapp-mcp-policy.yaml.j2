@@ -1,0 +1,10 @@
+{{ ansible_managed | comment }}
+rules:
+  - claims:
+      client_id: demojam-ao-rca
+    host: localhost
+    tools:
+{% for tool in webapp_mcp_tools %}
+      - {{ tool }}
+{% endfor %}
+    action: local

@@ -1,5 +1,6 @@
 .ansible/
 .venv/
+__pycache__/
 context/
 artifacts/
 *.retry

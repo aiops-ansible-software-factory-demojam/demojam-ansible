@@ -21,6 +21,7 @@ ansible-navigator:
         - DEMO_VM_API_CA
         - DEMO_VM_SSH_PRIVATE
         - DEMO_VM_SSH_PUBLIC
+        - DEMO_WEBAPP_MCP_MATERIAL
         - DEMO_RHEL_ENTITLEMENT_FILE
         - DEMO_EDA_WEBHOOK_TOKEN
         - DEMO_FORGEJO_EDA_WEBHOOK_TOKEN

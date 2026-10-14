@@ -1,0 +1,210 @@
+---
+- name: Manage read-only MCP diagnostics on the RHEL webapp
+  hosts: webapps
+  become: true
+  gather_facts: true
+  vars_files:
+    - ../../group_vars/webapps.yml
+  handlers:
+    - name: Restart webapp MCP
+      ansible.builtin.systemd_service:
+        name: webapp-mcp
+        daemon_reload: true
+        state: restarted
+  tasks:
+    - name: Require the supported guest and lifecycle state
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['distribution'] in ['RedHat', 'CentOS', 'Rocky']
+          - ansible_facts['distribution_major_version'] | int >= 9
+          - ansible_facts['architecture'] == 'x86_64'
+          - webapp_mcp_state | default('present') in ['present', 'absent']
+        fail_msg: Webapp MCP supports RHEL-compatible x86_64 guests with Python 3.12.
+
+    - name: Stop diagnostics when disabled
+      when: webapp_mcp_state | default('present') == 'absent'
+      block:
+        - name: Discover installed services
+          ansible.builtin.service_facts:
+        - name: Stop and disable the installed MCP service
+          ansible.builtin.systemd_service:
+            name: webapp-mcp
+            enabled: false
+            state: stopped
+          when: "'webapp-mcp.service' in ansible_facts['services']"
+        - name: Close the diagnostics firewall port
+          ansible.posix.firewalld:
+            port: 8443/tcp
+            state: disabled
+            permanent: true
+            immediate: true
+        - name: Remove guest authentication and TLS material
+          ansible.builtin.file:
+            path: /etc/webapp-mcp
+            state: absent
+
+    - name: Install and configure diagnostics
+      when: webapp_mcp_state | default('present') == 'present'
+      block:
+        - name: Validate bootstrap-supplied service material
+          ansible.builtin.assert:
+            that:
+              - webapp_mcp_material_lookup.token_sha256 is match('^[0-9a-f]{64}$')
+              - webapp_mcp_material_lookup.expires_at | int > ansible_facts['date_time']['epoch'] | int
+              - webapp_mcp_material_lookup.tls_cert | length > 0
+              - webapp_mcp_material_lookup.tls_key | length > 0
+              - webapp_mcp_material_lookup.ca_cert | length > 0
+          no_log: true
+
+        - name: Install the isolated runtime and diagnostic command dependencies
+          ansible.builtin.package:
+            name: [python3.12, python3.12-pip, acl, iproute, procps-ng]
+            state: present
+
+        - name: Create the diagnostics group
+          ansible.builtin.group:
+            name: mcpdiag
+            system: true
+
+        - name: Create an unprivileged diagnostics account
+          ansible.builtin.user:
+            name: mcpdiag
+            group: mcpdiag
+            groups: systemd-journal
+            append: true
+            system: true
+            create_home: false
+            shell: /sbin/nologin
+
+        - name: Create root-owned application and configuration directories
+          ansible.builtin.file:
+            path: "{{ item }}"
+            state: directory
+            owner: root
+            group: mcpdiag
+            mode: '0750'
+          loop: [/opt/webapp-mcp, /etc/webapp-mcp]
+
+        - name: Create the daemon log directory
+          ansible.builtin.file:
+            path: /var/log/webapp-mcp
+            state: directory
+            owner: mcpdiag
+            group: mcpdiag
+            mode: '0700'
+
+        - name: Install the hashed dependency lock
+          ansible.builtin.copy:
+            src: webapp-mcp-requirements.txt
+            dest: /opt/webapp-mcp/requirements.txt
+            owner: root
+            group: root
+            mode: '0644'
+          notify: Restart webapp MCP
+
+        - name: Install verified Python dependencies in a dedicated environment
+          ansible.builtin.pip:
+            requirements: /opt/webapp-mcp/requirements.txt
+            virtualenv: /opt/webapp-mcp/venv
+            virtualenv_command: /usr/bin/python3.12 -m venv
+            extra_args: '--require-hashes --only-binary=:all:'
+          notify: Restart webapp MCP
+
+        - name: Install the AO bearer authentication adapter
+          ansible.builtin.copy:
+            src: webapp-mcp-server.py
+            dest: /opt/webapp-mcp/server.py
+            owner: root
+            group: root
+            mode: '0644'
+          notify: Restart webapp MCP
+
+        - name: Install guest credential digest and TLS material
+          ansible.builtin.copy:
+            dest: "/etc/webapp-mcp/{{ item.name }}"
+            content: "{{ item.content }}"
+            owner: root
+            group: mcpdiag
+            mode: '0640'
+          loop:
+            - name: credential.json
+              content: >-
+                {{ {'token_sha256': webapp_mcp_material_lookup.token_sha256,
+                    'expires_at': webapp_mcp_material_lookup.expires_at | int} | to_json }}
+            - name: tls.crt
+              content: "{{ webapp_mcp_material_lookup.tls_cert }}"
+            - name: tls.key
+              content: "{{ webapp_mcp_material_lookup.tls_key }}"
+            - name: ca.crt
+              content: "{{ webapp_mcp_material_lookup.ca_cert }}"
+          no_log: true
+          notify: Restart webapp MCP
+
+        - name: Configure the service and authorization policy
+          ansible.builtin.template:
+            src: "{{ item.src }}"
+            dest: "{{ item.dest }}"
+            owner: root
+            group: root
+            mode: '0644'
+          loop:
+            - src: webapp-mcp.env.j2
+              dest: /etc/webapp-mcp/server.env
+            - src: webapp-mcp-policy.yaml.j2
+              dest: /etc/webapp-mcp/policy.yaml
+            - src: webapp-mcp.service.j2
+              dest: /etc/systemd/system/webapp-mcp.service
+          notify: Restart webapp MCP
+
+        - name: Allow diagnostics to traverse the nginx log directory
+          ansible.posix.acl:
+            path: /var/log/nginx
+            entity: mcpdiag
+            etype: user
+            permissions: rx
+            state: present
+
+        - name: Preserve diagnostic read access for new nginx logs
+          ansible.posix.acl:
+            path: /var/log/nginx
+            entity: mcpdiag
+            etype: user
+            permissions: rx
+            default: true
+            state: present
+
+        - name: Allow reading the selected existing nginx logs
+          ansible.posix.acl:
+            path: "/var/log/nginx/{{ item }}"
+            entity: mcpdiag
+            etype: user
+            permissions: r
+            state: present
+          loop: [access.log, error.log]
+
+        - name: Open the guest diagnostics port
+          ansible.posix.firewalld:
+            port: 8443/tcp
+            state: enabled
+            permanent: true
+            immediate: true
+
+        - name: Apply pending service configuration
+          ansible.builtin.meta: flush_handlers
+
+        - name: Enable the diagnostics service
+          ansible.builtin.systemd_service:
+            name: webapp-mcp
+            daemon_reload: true
+            enabled: true
+            state: started
+
+        - name: Verify the guest TLS listener rejects unauthenticated requests
+          ansible.builtin.uri:
+            url: https://localhost:8443/mcp
+            ca_path: /etc/webapp-mcp/ca.crt
+            status_code: 401
+          register: webapp_mcp_health
+          until: webapp_mcp_health.status == 401
+          retries: 12
+          delay: 5

@@ -1,5 +1,8 @@
 ---
 collections:
+  - name: ansible.posix
+    version: 2.2.2
+    source: https://galaxy.ansible.com
   # Controller sync isolates its collection cache from the image's collection path.
   # Copy certified dependencies from ee-supported instead of downloading from Hub.
   - name: /usr/share/ansible/collections/ansible_collections/ansible/controller

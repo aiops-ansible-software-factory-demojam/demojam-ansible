@@ -1,0 +1,28 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Read-only webapp MCP diagnostics
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=mcpdiag
+Group=mcpdiag
+SupplementaryGroups=systemd-journal
+EnvironmentFile=/etc/webapp-mcp/server.env
+ExecStart=/opt/webapp-mcp/venv/bin/python /opt/webapp-mcp/server.py
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/log/webapp-mcp
+RestrictSUIDSGID=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+UMask=0077
+MemoryMax=512M
+CPUQuota=100%
+
+[Install]
+WantedBy=multi-user.target

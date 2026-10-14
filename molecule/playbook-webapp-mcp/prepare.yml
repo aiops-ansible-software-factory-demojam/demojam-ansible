@@ -1,0 +1,62 @@
+---
+- name: Prepare the provisioned guest
+  ansible.builtin.import_playbook: david_igou.molecule_provisioners.prepare
+
+- name: Prepare nginx and TLS test material
+  hosts: molecule
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Install the guest fixture services
+      ansible.builtin.package:
+        name: [nginx, firewalld, openssl, logrotate]
+        state: present
+    - name: Start the fixture services
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        state: started
+        enabled: true
+      loop: [nginx, firewalld]
+    - name: Create a localhost certificate for the HTTPS test
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - req
+          - -x509
+          - -newkey
+          - rsa:2048
+          - -nodes
+          - -days
+          - '1'
+          - -subj
+          - /CN=localhost
+          - -addext
+          - subjectAltName=DNS:localhost
+          - -keyout
+          - /tmp/mcp-test.key
+          - -out
+          - /tmp/mcp-test.crt
+        creates: /tmp/mcp-test.crt
+      no_log: true
+    - name: Read the fixture certificate
+      ansible.builtin.slurp:
+        src: /tmp/mcp-test.crt
+      register: mcp_fixture_certificate
+    - name: Read the fixture private key
+      ansible.builtin.slurp:
+        src: /tmp/mcp-test.key
+      register: mcp_fixture_key
+      no_log: true
+    - name: Save test-only material for the production inventory interface
+      ansible.builtin.copy:
+        dest: "{{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/mcp-material.json"
+        content: >-
+          {{ {'token_sha256': 'molecule-diagnostics-token' | hash('sha256'),
+              'expires_at': 2000000000,
+              'tls_cert': mcp_fixture_certificate.content | b64decode,
+              'tls_key': mcp_fixture_key.content | b64decode,
+              'ca_cert': mcp_fixture_certificate.content | b64decode} | to_json }}
+        mode: '0600'
+      delegate_to: localhost
+      become: false
+      no_log: true

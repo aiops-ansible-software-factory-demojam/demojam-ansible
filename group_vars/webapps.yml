@@ -2,3 +2,16 @@
 demo_backend: "{{ lookup('ansible.builtin.env', 'DEMO_BACKEND', default='cnv') }}"
 ansible_user: "{{ 'ec2-user' if demo_backend == 'aws' else 'cloud-user' }}"
 rhel_entitlement_file_lookup: "{{ lookup('ansible.builtin.env', 'RHEL_ENTITLEMENT_FILE') }}"
+webapp_mcp_material_lookup: >-
+  {{ lookup('ansible.builtin.file', lookup('ansible.builtin.env', 'WEBAPP_MCP_MATERIAL_FILE')) | from_json
+     if lookup('ansible.builtin.env', 'WEBAPP_MCP_MATERIAL_FILE') | length > 0 else {} }}
+webapp_mcp_tools:
+  - get_service_status
+  - get_service_logs
+  - get_journal_logs
+  - read_log_file
+  - get_network_connections
+  - get_system_information
+  - get_cpu_information
+  - get_memory_information
+  - get_disk_usage
