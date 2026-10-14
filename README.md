@@ -150,7 +150,7 @@ execution is serialized. Resolved notifications do not close issues.
 
 ### Live diagnostics for AO RCA
 
-The CNV webapp can run native, read-only Linux MCP diagnostics. AAP's
+The CNV or AWS webapp can run native, read-only Linux MCP diagnostics. AAP's
 `webapp_mcp` template applies `playbooks/webapp/mcp-install.yml` after nginx and
 the RHEL repositories are configured. It installs Python 3.12 dependencies from
 the hashed Linux x86_64 lock, runs as `mcpdiag` under systemd, and serves TLS on
@@ -171,7 +171,8 @@ implements authentication while retaining Linux MCP's tool authorization.
 `webapp_mcp_state: absent` stops/disables the daemon, closes the firewall port,
 and removes guest credential/TLS material while preserving nginx. Follow the
 `openshift-gitops` maintenance commands to enable, verify, rotate or disable
-the integration before changing the service. AWS defaults to audit-only RCA.
+the integration before changing the service. AWS defaults to audit-only RCA;
+set `WEBAPP_MCP_ENABLED=true` in openshift-gitops to enable its managed EC2 path.
 
 Functional checks:
 
