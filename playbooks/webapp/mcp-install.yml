@@ -38,6 +38,8 @@
             state: disabled
             permanent: true
             immediate: true
+            offline: true
+          when: "'firewalld.service' in ansible_facts['services']"
         - name: Remove guest authentication and TLS material
           ansible.builtin.file:
             path: /etc/webapp-mcp
@@ -58,7 +60,7 @@
 
         - name: Install the isolated runtime and diagnostic command dependencies
           ansible.builtin.package:
-            name: [python3.12, python3.12-pip, acl, iproute, procps-ng]
+            name: [python3.12, python3.12-pip, acl, iproute, procps-ng, firewalld]
             state: present
 
         - name: Create the diagnostics group
@@ -182,12 +184,20 @@
             state: present
           loop: [access.log, error.log]
 
-        - name: Open the guest diagnostics port
+        - name: Preserve HTTP and SSH while opening diagnostics before firewall startup
           ansible.posix.firewalld:
-            port: 8443/tcp
+            port: "{{ item }}/tcp"
             state: enabled
             permanent: true
             immediate: true
+            offline: true
+          loop: [22, 80, 8443]
+
+        - name: Enable the guest firewall with the approved ports configured
+          ansible.builtin.systemd_service:
+            name: firewalld
+            enabled: true
+            state: started
 
         - name: Apply pending service configuration
           ansible.builtin.meta: flush_handlers

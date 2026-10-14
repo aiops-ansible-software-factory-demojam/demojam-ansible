@@ -7,16 +7,20 @@
   become: true
   gather_facts: false
   tasks:
+    - name: Require production setup to supply the firewall dependency
+      ansible.builtin.package:
+        name: [firewalld, python3-firewall]
+        state: absent
     - name: Install the guest fixture services
       ansible.builtin.package:
-        name: [nginx, firewalld, openssl, logrotate]
+        name: [nginx, openssl, logrotate]
         state: present
     - name: Start the fixture services
       ansible.builtin.systemd_service:
         name: "{{ item }}"
         state: started
         enabled: true
-      loop: [nginx, firewalld]
+      loop: [nginx]
     - name: Create a localhost certificate for the HTTPS test
       ansible.builtin.command:
         argv:
