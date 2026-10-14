@@ -18,9 +18,10 @@
         that:
           - ansible_facts['distribution'] == 'RedHat'
           - ansible_facts['distribution_major_version'] == '9'
-          - rhel_entitlement_file_lookup | length > 0
+          - demo_backend == 'aws' or rhel_entitlement_file_lookup | length > 0
 
     - name: Install the manifest's CDN entitlement
+      when: demo_backend == 'cnv'
       ansible.builtin.copy:
         src: "{{ rhel_entitlement_file_lookup }}"
         dest: /etc/pki/entitlement/aap-demo.pem
@@ -30,6 +31,7 @@
       no_log: true
 
     - name: Enable the entitled RHEL 9 package repositories
+      when: demo_backend == 'cnv'
       ansible.builtin.yum_repository:
         name: "aap-demo-{{ item }}"
         description: "RHEL 9 {{ item }} for the AAP demo"
@@ -45,12 +47,6 @@
       loop:
         - baseos
         - appstream
-
-    # Disable SELinux enforcement for the first part of the demo
-    - name: Set SELinux to permissive
-      ansible.posix.selinux:
-        policy: targeted
-        state: permissive
 
   roles:
     - role: demo.webapp.nginx

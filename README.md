@@ -30,10 +30,10 @@ after populating its root `.env` and supplying `aap_manifest.zip`.
 There is no custom AAP image build or Automation Hub token. Root `requirements.yml`
 installs `infra.aap_configuration` from public Galaxy and `demo.webapp` from
 public Forgejo Git on project updates. Controller's isolated collection cache
-cannot see the supported image's collection path during installation, so four
+cannot see the supported image's collection path during installation, so
 `type: dir` entries copy CaC's certified dependencies from that image into the
 cache. They require no downloads or Hub authentication. The supported image
-already contains the Virtualization collection and required Python/system packages.
+already contains the Virtualization and AWS collections and the required Python/system packages.
 
 SCM and Git collection URLs use `http://forgejo.forgejo.svc.cluster.local:3000`.
 They are reachable from AAP project updates and execution pods, without
@@ -49,7 +49,7 @@ The dispatch credential provides `AAP_HOST`, `AAP_USERNAME`, `AAP_PASSWORD`,
 `AAP_EE_IMAGE`, `DEMO_OIDC_ISSUER`, `DEMO_OIDC_CLIENT_SECRET`, `DEMO_VM_API_HOST`,
 `DEMO_VM_API_TOKEN`, `DEMO_VM_API_CA`, `DEMO_VM_SSH_PRIVATE`,
 `DEMO_VM_SSH_PUBLIC`, `DEMO_RHEL_ENTITLEMENT_FILE`, `DEMO_EDA_WEBHOOK_TOKEN`,
-and `DEMO_FORGEJO_TOKEN`. The entitlement is injected as a private file to avoid process environment size
+`DEMO_FORGEJO_EDA_WEBHOOK_TOKEN`, and `DEMO_FORGEJO_TOKEN`. The entitlement is injected as a private file to avoid process environment size
 limits. These inputs are required;
 missing material fails before any AAP objects are changed.
 
@@ -73,15 +73,24 @@ job template's execution permission.
 
 ## Launch and automate the RHEL webapp
 
-In AAP, launch **webapp_vm**, then **webapp_nginx**. The first clones the
+For initial demo setup in AAP, launch **webapp_vm**,
+**webapp_selinux_permissive**, then **webapp_nginx**. Bootstrap runs these
+jobs in that order. The VM job clones the
 cluster's `rhel9` DataSource into `webapp-vms` and adds the generated public
-SSH key through cloud-init. The second refreshes discovery, waits for SSH,
+SSH key through cloud-init. The separate setup playbook waits for SSH and
+sets SELinux to Permissive so the unfixed collection can serve HTTP.
+The nginx job refreshes discovery, waits for SSH,
 enables the entitled RHEL 9 BaseOS/AppStream repositories, and uses
 `demo.webapp.nginx` from the public example collection. Controller installs
 that collection from `requirements.yml` on project synchronization;
 No Galaxy upload is required.
 
-VM inventory queries only `automation-vms` and `webapp-vms`. The webapp is
+The nginx installation playbook and base collection leave the SELinux mode
+unchanged. After **webapp_selinux_enable** triggers the outage, merge the
+tested collection fix and launch **webapp_nginx** once to deploy it with
+SELinux still Enforcing. Do not run the permissive setup job during recovery.
+
+CNV inventory queries only `automation-vms` and `webapp-vms`. The webapp is
 `webapp-webapp-vms` in group `webapps`; its SSH hostname is the internal Service.
 GitOps owns the HTTP/SSH Services, HTTPS Route and blackbox probe. The probe
 becomes healthy once nginx serves HTTP. No automatic CI or schedule is added.
@@ -90,6 +99,7 @@ From openshift-gitops, the corresponding commands are:
 
 ```bash
 make webapp-create
+bash bootstrap/bootstrap.sh aap launch webapp_selinux_permissive
 make webapp-nginx
 make webapp-verify
 make webapp-delete
@@ -103,7 +113,7 @@ The SSH key and API token are runtime demo credentials preserved by reruns.
 
 ## Generic VM example
 
-The **openshift_virtualization_machine** template remains available for
+In CNV mode, the **openshift_virtualization_machine** template remains available for
 CirrOS/Fedora examples in `automation-vms`, with `host: demo_cluster` and
 `vm_state: present` or `absent`. It is separate from the fixed RHEL webapp.
 
@@ -111,9 +121,9 @@ CirrOS/Fedora examples in `automation-vms`, with `host: demo_cluster` and
 
 `make demo-reset` in openshift-gitops wipes Forgejo and developer-agent
 sessions, then seeds this starting config and the README feature issue.
-It preserves AAP runtime credentials and existing VMs. Delete the webapp
-first when testing fresh provisioning, then reset, bootstrap, and launch it
-again. Normal hydration preserves user commits; config changes must be pushed
+It removes the monitored guest and disposable test guests while preserving AAP
+and runtime credentials. Run bootstrap afterward to restore the permissive
+unfixed baseline. AWS also preserves its network and selected images. Normal hydration preserves user commits; config changes must be pushed
 to Forgejo before dispatch. Manifest ZIPs and `.env` files are excluded from
 fixture snapshots.
 
@@ -135,3 +145,43 @@ The issue destination is fixed in `group_vars/aap/webapp_issue.yml`: Forgejo col
 `demo-owner/ansible-collection-demo.webapp`. Its credential injects `FORGEJO_API_TOKEN`
 only into the issue job. Existing open outage issues are reused; template
 execution is serialized. Resolved notifications do not close issues.
+
+## Incident remediation
+
+Bootstrap also configures a separate authenticated Forgejo event stream and
+the `forgejo-issue-remediation.yml` rulebook. The repository's issue webhook
+reaches this listener using its own token. Only newly opened, open incidents
+in the fixed collection repository with the outage marker and RCA match.
+Edits, comments, starter issues, closed/reopened issues, and PRs are ignored.
+
+The rulebook launches `call_ao_webhook` with `issue_number` and
+`ao_webhook_path: forgejo-issue-remediation`. That job publishes
+`ao_execution_id`. AO prepares the issue branch through Backstage and feeds
+the complete issue and RCA into an Omnigent session. The coding agent preserves
+SELinux enforcing, implements and tests the collection fix, and submits a PR;
+a human merges after tests pass and launches one recovery job.
+
+Both event streams have fixed UUIDs, persistent independent credentials, and
+activation readiness checks. All bootstrap logic, hook registration, model
+selection, and workflow publication live in openshift-gitops' existing
+`bootstrap/bootstrap.sh`. Run that entry point to set up the whole demo.
+
+## AWS guests
+
+Bootstrap selects `DEMO_BACKEND=aws` in the dispatch credential. Config-as-code
+keeps the same `webapp_vm`, setup, fault and recovery job names. `webapp_vm`
+uses `playbooks/aws/webapp-launch.yml` to manage one deployment-tagged RHEL 9
+EC2 instance and updates the EndpointSlices behind the existing webapp Services.
+The AWS inventory discovers only running guests with that deployment ID and
+purpose `webapp`; SSH uses the public address and `ec2-user`.
+
+AWS jobs receive the bootstrap-created AAP key through `demo-aws-guest`.
+The bootstrap root/admin key is never supplied to AAP. The dispatch credential
+carries `DEMO_AWS_ACCESS_KEY_ID`, `DEMO_AWS_SECRET_ACCESS_KEY`, `DEMO_AWS_REGION`
+and the saved nonsecret guest settings in `DEMO_AWS_CONFIG`. AWS nginx jobs use
+the AMI's RHUI repositories and omit the workshop CDN entitlement setup.
+The generic CNV job is registered only for CNV deployments.
+
+Both backends provision first, run the separate permissive setup job, and then
+install the unfixed collection. Recovery remains one `webapp_nginx` launch
+after a test-gated merge, with SELinux still enforcing.

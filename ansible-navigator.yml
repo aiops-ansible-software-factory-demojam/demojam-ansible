@@ -23,6 +23,7 @@ ansible-navigator:
         - DEMO_VM_SSH_PUBLIC
         - DEMO_RHEL_ENTITLEMENT_FILE
         - DEMO_EDA_WEBHOOK_TOKEN
+        - DEMO_FORGEJO_EDA_WEBHOOK_TOKEN
         - DEMO_FORGEJO_TOKEN
         - FORGEJO_TOKEN
         - K8S_AUTH_HOST
