@@ -1,0 +1,58 @@
+---
+- name: Collect the oversized fixture through production automation
+  ansible.builtin.import_playbook: ../../playbooks/auditlogs/pull-audit-logs.yml
+
+- name: Verify useful bounded evidence instead of raw logs
+  hosts: webapps
+  gather_facts: false
+  tasks:
+    - name: Require observed denial facts and a safe prompt artifact
+      ansible.builtin.assert:
+        that:
+          - auditlogs_compact_facts.status == 'observed'
+          - auditlogs_compact_facts.events | length == 4
+          - auditlogs_compact_facts.events[0].source_context == 'system_u:system_r:httpd_t:s0'
+          - auditlogs_compact_facts.events[0].target_context == 'system_u:object_r:default_t:s0'
+          - auditlogs_compact_facts.events[0].operations == 'read getattr'
+          - auditlogs_compact_facts.events[0].audit_event == '1792010375.123:1'
+          - auditlogs_compact_facts.events[0].permissive == '0'
+          - auditlogs_compact_facts.truncated
+          - auditlogs_compact_facts.line_limit_reached
+          - auditlogs_published.ansible_stats.data.affected_host_facts | length <= 3000
+          - "'PRIVATE_NOISE' not in auditlogs_published.ansible_stats.data.affected_host_facts"
+          - auditlogs_published.ansible_stats.data.affected_host_facts == auditlogs_published.ansible_stats.data.affected_host_log_output
+        fail_msg: RCA needs bounded, genuine SELinux facts without unrelated raw audit content.
+
+- name: Collect evidence from an unavailable audit file
+  ansible.builtin.import_playbook: ../../playbooks/auditlogs/pull-audit-logs.yml
+  vars:
+    auditlogs_log_path: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/missing-audit.log"
+
+- name: Verify failed collection never invents evidence
+  hosts: webapps
+  gather_facts: false
+  tasks:
+    - name: Require an explicit unavailable artifact
+      ansible.builtin.assert:
+        that:
+          - auditlogs_compact_facts.status == 'unavailable'
+          - auditlogs_compact_facts.events == []
+          - auditlogs_compact_facts.limitations | length > 0
+        fail_msg: A failed audit read must produce an explicit limitation without denial facts.
+
+- name: Collect matching entries without a denial
+  ansible.builtin.import_playbook: ../../playbooks/auditlogs/pull-audit-logs.yml
+  vars:
+    auditlogs_log_path: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/audit-long.log.benign"
+
+- name: Verify benign entries do not become SELinux claims
+  hosts: webapps
+  gather_facts: false
+  tasks:
+    - name: Require no invented AVC and a useful collection limitation
+      ansible.builtin.assert:
+        that:
+          - auditlogs_compact_facts.status == 'observed'
+          - auditlogs_compact_facts.events == []
+          - auditlogs_compact_facts.limitations | length > 0
+        fail_msg: Matching nginx entries alone do not establish an SELinux denial.

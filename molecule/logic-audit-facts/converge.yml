@@ -1,0 +1,6 @@
+---
+- name: Restore deterministic fixtures on each run without cached preparation
+  ansible.builtin.import_playbook: prepare.yml
+
+- name: Collect and publish facts using the production playbook
+  ansible.builtin.import_playbook: ../../playbooks/auditlogs/pull-audit-logs.yml

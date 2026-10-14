@@ -1,0 +1,45 @@
+{# Reviewed, controller-side evidence extraction; never emit raw audit records. #}
+{% set lines = check_audit_service_logs.stdout_lines | default([]) %}
+{% set denials = lines | select('search', 'avc:\\s+denied\\s+\\{') | list %}
+{% set mode = auditlogs_selinux.stdout | default('unknown') | trim %}
+{% set facts = namespace(data={
+  'status': 'observed' if check_audit_service_logs.rc | default(2) in [0, 1] else 'unavailable',
+  'collected_at': now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ'),
+  'selinux_mode': mode if mode in ['Enforcing', 'Permissive', 'Disabled'] else 'unknown',
+  'recent_matching_entries': lines | length,
+  'line_limit_reached': lines | length == 20,
+  'truncated': denials | length > 4,
+  'events': [],
+  'limitations': []
+}) %}
+{% if facts.data.status == 'unavailable' %}
+{% set _ = facts.data.update({'limitations': ['Audit collection failed; no denial evidence is available.']}) %}
+{% elif not denials %}
+{% set _ = facts.data.update({'limitations': ['No AVC denial in the recent matching entries; this does not rule out SELinux.']}) %}
+{% endif %}
+{% for line in denials[-4:] if facts.data.status == 'observed' %}
+{% set event = {} %}
+{% for key, pattern, limit in [
+  ('audit_event', '\\bmsg=audit\\(([^)]+)\\)', 40),
+  ('operations', 'avc:\\s+denied\\s+\\{\\s*([^}]+)', 48),
+  ('comm', '\\bcomm="([^"]*)"', 32),
+  ('name', '\\bname="([^"]*)"', 64),
+  ('source_context', '\\bscontext=([^\\s]+)', 96),
+  ('target_context', '\\btcontext=([^\\s]+)', 96),
+  ('target_class', '\\btclass=([^\\s]+)', 32),
+  ('permissive', '\\bpermissive=([01])', 1)
+] %}
+{% set value = line | regex_findall(pattern) | first | default('') | trim %}
+{% if value | length > limit %}
+{% set _ = facts.data.update({'truncated': true}) %}
+{% endif %}
+{% set _ = event.update({key: value[:limit]}) %}
+{% endfor %}
+{% set candidate = dict(facts.data, events=facts.data.events + [event]) %}
+{% if candidate | to_json(ensure_ascii=false, separators=[',', ':']) | length <= 3000 %}
+{% set _ = facts.data.update({'events': candidate.events}) %}
+{% else %}
+{% set _ = facts.data.update({'truncated': true}) %}
+{% endif %}
+{% endfor %}
+{{ facts.data | to_json(ensure_ascii=false, separators=[',', ':']) }}

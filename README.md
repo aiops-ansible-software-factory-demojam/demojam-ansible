@@ -150,6 +150,15 @@ execution is serialized. Resolved notifications do not close issues.
 
 ### Live diagnostics for AO RCA
 
+The `pull_audit_logs` job publishes structured SELinux facts capped at 3,000
+characters, including current enforcement mode, collection time, up to four
+recent AVC events and explicit truncation/collection limitations. Only selected
+event fields are included; raw audit stdout stays out of RCA prompts and AAP
+task output. `affected_host_facts` is the new artifact; the existing
+`affected_host_log_output` also carries that compact JSON during coordinated
+workflow updates. `molecule test -s logic-audit-facts` exercises oversized Unicode
+records, unavailable collection, benign entries and idempotence locally.
+
 The CNV or AWS webapp can run native, read-only Linux MCP diagnostics. AAP's
 `webapp_mcp` template applies `playbooks/webapp/mcp-install.yml` after nginx and
 the RHEL repositories are configured. It installs Python 3.12 dependencies from

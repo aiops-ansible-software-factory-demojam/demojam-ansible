@@ -1,0 +1,21 @@
+---
+- name: Prepare isolated audit evidence fixtures
+  hosts: webapps
+  gather_facts: false
+  vars:
+    audit_fixture_record: >-
+      type=AVC msg=audit(1792010375.123:1) avc: denied { read getattr }
+      for comm="nginx" name="{{ '页面' * 500 }}"
+      scontext=system_u:system_r:httpd_t:s0 tcontext=system_u:object_r:default_t:s0
+      tclass=file permissive=0 unrelated="{{ 'PRIVATE_NOISE' * 500 }}"
+  tasks:
+    - name: Write oversized AVC entries with unrelated private content
+      ansible.builtin.copy:
+        dest: "{{ auditlogs_log_path }}"
+        mode: "0600"
+        content: "{{ ([audit_fixture_record] * 35) | join('\n') }}\n"
+    - name: Write matching entries without SELinux denials
+      ansible.builtin.copy:
+        dest: "{{ auditlogs_log_path }}.benign"
+        mode: "0600"
+        content: "type=SERVICE_START msg=audit(1:1) comm=nginx success=yes\n"

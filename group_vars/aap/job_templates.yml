@@ -86,7 +86,7 @@ demo_controller_templates:
     ask_variables_on_launch: true
     allow_simultaneous: false
   - name: pull_audit_logs
-    description: Retrieve recent nginx-related audit log entries from the impacted webapp host
+    description: Publish bounded SELinux audit facts from the impacted webapp host
     organization: demo
     project: demojam-ansible
     inventory: demo-inventory
