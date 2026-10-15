@@ -137,8 +137,10 @@ activation so updated rulebooks take effect.
 `rulebooks/webapp-alert-issue.yml` accepts firing `WebappDown` notifications
 from `blackbox-exporter` and starts `call_ao_webhook` with the original alert
 payload. Its AO service-account credential authenticates the call to the
-`alertmanagealert` trigger. AO runs `pull_audit_logs`, asks the configured model
-for a diagnosis, then launches `webapp_alert_issue` with the alert and diagnosis.
+`alertmanagealert` trigger. AO asks the configured model to investigate with MCP audit diagnostics first.
+It runs `pull_audit_logs` only when MCP is disabled or the primary/audit evidence
+is unavailable, then uses text-only RCA. One completed diagnosis reaches
+`webapp_alert_issue` with the original alert.
 The workflow and the policy allowing AAP to reach AO are in openshift-gitops.
 
 The issue destination is fixed in `group_vars/aap/webapp_issue.yml`: Forgejo collection repository
@@ -166,7 +168,23 @@ the hashed Linux x86_64 lock, runs as `mcpdiag` under systemd, and serves TLS on
 8443. It has journal access and read ACLs for nginx logs, including newly rotated
 logs. It has no sudo or capabilities. General file reads and script execution
 are excluded by the server policy. Service/journal requests are restricted to
-nginx and log reads are capped at 20 lines. Privileged audit evidence remains an AAP job.
+nginx and log reads are capped at 20 lines.
+
+`get_selinux_denials` reads a root-owned snapshot rather than the raw audit file.
+A fixed local systemd collector reads at most 64 KiB from the current audit file
+every five seconds. It filters recent nginx AVC denials and emits at most four
+events and 3,000 characters, with current enforcement mode and explicit scope,
+truncation and collection limitations. Atomic root-owned mode-0640 publication
+allows `mcpdiag` to read the snapshot without writing it or reading raw audit
+records. Snapshots older than 30 seconds are unavailable. No request-supplied
+paths, commands or privilege elevation are accepted. Disabling MCP stops the
+collector timer/service and removes the runtime snapshot. AAP remains the
+independent audit fallback.
+
+`tests/test_webapp_mcp_audit.py` covers filtering, size limits, freshness and
+unavailable sources. The guest scenario uses a clearly synthetic audit fixture
+in its disposable VM; it verifies tool access, reboot persistence, raw audit
+read denial, idempotence and cleanup.
 
 Bootstrap supplies `Demo Webapp MCP` with a private JSON file containing the
 machine credential's SHA-256 digest/expiry and TLS certificate/key/CA. Inventory

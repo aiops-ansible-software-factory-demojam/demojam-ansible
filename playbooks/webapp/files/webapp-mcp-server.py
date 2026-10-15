@@ -74,6 +74,19 @@ def main():
     # upstream authorization middleware still checks every tool against policy.
     from linux_mcp_server.config import CONFIG
     from linux_mcp_server.server import mcp
+    from linux_mcp_server.target_host import target_host_from
+    from webapp_mcp_audit import SNAPSHOT, read_snapshot
+
+    @mcp.tool(tags={"fixed"}, annotations={"readOnlyHint": True, "destructiveHint": False})
+    @target_host_from(lambda arguments: "localhost")
+    def get_selinux_denials() -> dict:
+        """Get fresh, bounded nginx AVC facts and SELinux mode from the local audit collector.
+
+        Returns up to four events from the last 15 minutes, at most 3000 characters.
+        An unavailable status requires the AAP audit fallback. No events does not
+        rule out SELinux. Arbitrary paths, commands and raw audit reads are forbidden.
+        """
+        return read_snapshot(Path(os.environ.get("WEBAPP_MCP_AUDIT_SNAPSHOT", SNAPSHOT)))
 
     if CONFIG.transport.value != "http" or CONFIG.host_mode.value != "local-only":
         raise ValueError("Diagnostics requires HTTP transport and local-only execution")

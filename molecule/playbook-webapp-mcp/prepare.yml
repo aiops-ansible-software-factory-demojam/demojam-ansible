@@ -21,6 +21,29 @@
         state: started
         enabled: true
       loop: [nginx]
+    - name: Read the fixture guest clock
+      ansible.builtin.command:
+        argv: [date, '+%s']
+      register: mcp_fixture_epoch
+      changed_when: false
+    - name: Prepare the isolated audit fixture directory
+      ansible.builtin.file:
+        path: /var/log/audit
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+    - name: Add a synthetic nginx denial only in the disposable test guest
+      ansible.builtin.lineinfile:
+        path: /var/log/audit/audit.log
+        create: true
+        owner: root
+        group: root
+        mode: '0600'
+        line: >-
+          type=AVC msg=audit({{ mcp_fixture_epoch.stdout }}.123:4242): avc: denied { read } for
+          comm="nginx" name="molecule-audit-fixture" scontext=system_u:system_r:httpd_t:s0
+          tcontext=unconfined_u:object_r:default_t:s0 tclass=file permissive=0
     - name: Create a localhost certificate for the HTTPS test
       ansible.builtin.command:
         argv:

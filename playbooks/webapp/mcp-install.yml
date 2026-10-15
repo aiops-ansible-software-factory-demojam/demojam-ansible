@@ -6,6 +6,9 @@
   vars_files:
     - ../../group_vars/webapps.yml
   handlers:
+    - name: Reload audit collector units
+      ansible.builtin.systemd_service:
+        daemon_reload: true
     - name: Restart webapp MCP
       ansible.builtin.systemd_service:
         name: webapp-mcp
@@ -26,12 +29,23 @@
       block:
         - name: Discover installed services
           ansible.builtin.service_facts:
-        - name: Stop and disable the installed MCP service
+        - name: Stop the installed audit refresh timer
           ansible.builtin.systemd_service:
-            name: webapp-mcp
+            name: webapp-mcp-audit.timer
             enabled: false
             state: stopped
-          when: "'webapp-mcp.service' in ansible_facts['services']"
+          when: "'webapp-mcp-audit.service' in ansible_facts['services']"
+        - name: Stop and disable installed diagnostics services
+          ansible.builtin.systemd_service:
+            name: "{{ item }}"
+            enabled: false
+            state: stopped
+          loop: [webapp-mcp.service, webapp-mcp-audit.service]
+          when: item in ansible_facts['services']
+        - name: Remove the bounded audit snapshot when disabled
+          ansible.builtin.file:
+            path: /run/webapp-mcp-audit
+            state: absent
         - name: Close the diagnostics firewall port
           ansible.posix.firewalld:
             port: 8443/tcp
@@ -121,6 +135,25 @@
             mode: '0644'
           notify: Restart webapp MCP
 
+        - name: Install the fixed audit projection collector
+          ansible.builtin.copy:
+            src: webapp_mcp_audit.py
+            dest: /opt/webapp-mcp/webapp_mcp_audit.py
+            owner: root
+            group: root
+            mode: '0644'
+          notify: Restart webapp MCP
+
+        - name: Configure the local audit collector and refresh timer
+          ansible.builtin.template:
+            src: "{{ item }}.j2"
+            dest: "/etc/systemd/system/{{ item }}"
+            owner: root
+            group: root
+            mode: '0644'
+          loop: [webapp-mcp-audit.service, webapp-mcp-audit.timer]
+          notify: Reload audit collector units
+
         - name: Install guest credential digest and TLS material
           ansible.builtin.copy:
             dest: "/etc/webapp-mcp/{{ item.name }}"
@@ -201,6 +234,13 @@
 
         - name: Apply pending service configuration
           ansible.builtin.meta: flush_handlers
+
+        - name: Enable the bounded audit snapshot refresh
+          ansible.builtin.systemd_service:
+            name: webapp-mcp-audit.timer
+            daemon_reload: true
+            enabled: true
+            state: started
 
         - name: Enable the diagnostics service
           ansible.builtin.systemd_service:

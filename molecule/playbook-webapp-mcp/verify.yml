@@ -30,6 +30,12 @@
         cmd: ../../tests/guest_mcp_probe.py
         executable: /opt/webapp-mcp/venv/bin/python
       changed_when: false
+    - name: Verify the MCP account cannot read the raw audit file
+      ansible.builtin.command:
+        argv: [runuser, -u, mcpdiag, '--', head, -c, '1', /var/log/audit/audit.log]
+      register: mcp_raw_audit_access
+      changed_when: false
+      failed_when: mcp_raw_audit_access.rc == 0
     - name: Verify the daemon has no effective capabilities
       ansible.builtin.command:
         argv: [systemctl, show, webapp-mcp, --property=CapabilityBoundingSet, --value]

@@ -11,6 +11,7 @@ import sys
 import tempfile
 import time
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
@@ -35,7 +36,7 @@ class DiagnosticsHTTPS(unittest.IsolatedAsyncioTestCase):
         cls.log_file.write_text("permission denied opening /web/index.html\n" * 40)
         (cls.directory / "policy.yaml").write_text(
             "rules:\n  - claims:\n      client_id: demojam-ao-rca\n"
-            "    host: localhost\n    tools: [get_disk_usage, read_log_file]\n    action: local\n"
+            "    host: localhost\n    tools: [get_disk_usage, read_log_file, get_selinux_denials]\n    action: local\n"
         )
         subprocess.run(
             ["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
@@ -56,6 +57,10 @@ class DiagnosticsHTTPS(unittest.IsolatedAsyncioTestCase):
             "token_sha256": hashlib.sha256(token.encode()).hexdigest(),
             "expires_at": expires_at or int(time.time()) + 3600,
         }))
+        (cls.directory / "audit-facts.json").write_text(json.dumps({
+            "status": "observed", "collected_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "events": [{"comm": "nginx", "target_context": "default_t"}], "limitations": [],
+        }))
         env = os.environ | {
             "LINUX_MCP_TRANSPORT": "http", "LINUX_MCP_HOST_MODE": "local-only",
             "LINUX_MCP_TOOLSET": "fixed", "LINUX_MCP_HOST": "127.0.0.1",
@@ -65,6 +70,7 @@ class DiagnosticsHTTPS(unittest.IsolatedAsyncioTestCase):
             "LINUX_MCP_POLICY_PATH": str(cls.directory / "policy.yaml"),
             "LINUX_MCP_ALLOWED_LOG_PATHS": str(cls.log_file),
             "LINUX_MCP_LOG_DIR": str(cls.directory / "logs"),
+            "WEBAPP_MCP_AUDIT_SNAPSHOT": str(cls.directory / "audit-facts.json"),
             "WEBAPP_MCP_CREDENTIAL_PATH": str(cls.directory / "credential.json"),
         }
         cls.process = subprocess.Popen(
@@ -101,6 +107,10 @@ class DiagnosticsHTTPS(unittest.IsolatedAsyncioTestCase):
                     await session.send_ping()
                     tools = await session.list_tools()
                     self.assertNotIn("run_script", {tool.name for tool in tools.tools})
+                    audit_result = await session.call_tool("get_selinux_denials", {})
+                    self.assertFalse(audit_result.isError)
+                    self.assertEqual(audit_result.structuredContent["status"], "observed")
+                    self.assertIn("default_t", str(audit_result.structuredContent))
                     result = await session.call_tool("get_disk_usage", {})
                     self.assertFalse(result.isError)
                     allowed = await session.call_tool("read_log_file", {"log_path": str(self.log_file)})

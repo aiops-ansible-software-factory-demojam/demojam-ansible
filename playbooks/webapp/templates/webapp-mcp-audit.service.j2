@@ -1,0 +1,23 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Publish bounded nginx SELinux audit facts for MCP
+
+[Service]
+Type=oneshot
+User=root
+Group=mcpdiag
+ExecStart=/usr/bin/python3.12 /opt/webapp-mcp/webapp_mcp_audit.py
+RuntimeDirectory=webapp-mcp-audit
+RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=yes
+UMask=0027
+NoNewPrivileges=true
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateNetwork=true
+ReadWritePaths=/run/webapp-mcp-audit
+RestrictSUIDSGID=true
+MemoryMax=128M
+TimeoutStartSec=10
