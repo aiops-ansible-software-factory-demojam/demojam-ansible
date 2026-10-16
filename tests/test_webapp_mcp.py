@@ -1,9 +1,7 @@
 """Exercise the deployed adapter and real Linux MCP over verified HTTPS."""
 
-import hashlib
 import json
 import os
-import secrets
 import socket
 import ssl
 import subprocess
@@ -11,15 +9,19 @@ import sys
 import tempfile
 import time
 import unittest
-from datetime import datetime, timezone
+from functools import partial
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from threading import Thread
 from pathlib import Path
 
 import httpx
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
+from mcp_jwt_fixture import ISSUER, create, token
+
 ROOT = Path(__file__).resolve().parents[1]
-SERVER = ROOT / "playbooks/webapp/files/webapp-mcp-server.py"
+SERVER = Path(sys.executable).with_name("linux-mcp-server")
 
 
 class DiagnosticsHTTPS(unittest.IsolatedAsyncioTestCase):
@@ -31,36 +33,29 @@ class DiagnosticsHTTPS(unittest.IsolatedAsyncioTestCase):
             listener.bind(("127.0.0.1", 0))
             cls.port = listener.getsockname()[1]
         cls.url = f"https://localhost:{cls.port}/mcp"
-        cls.token = secrets.token_hex(32)
+        cls.signing_key = create(cls.directory)
+        cls.token = token(cls.signing_key)
+        cls.jwks_server = ThreadingHTTPServer(("127.0.0.1", 0), partial(
+            SimpleHTTPRequestHandler, directory=str(cls.directory)))
+        cls.jwks_thread = Thread(target=cls.jwks_server.serve_forever, daemon=True)
+        cls.jwks_thread.start()
         cls.log_file = cls.directory / "nginx-error.log"
         cls.log_file.write_text("permission denied opening /web/index.html\n" * 40)
         (cls.directory / "policy.yaml").write_text(
-            "rules:\n  - claims:\n      client_id: demojam-ao-rca\n"
-            "    host: localhost\n    tools: [get_disk_usage, read_log_file, get_selinux_denials]\n    action: local\n"
+            "rules:\n  - claims:\n      azp: demojam-ao-rca\n      jti: test-token\n"
+            "    host: localhost\n    tools: [get_disk_usage, read_log_file]\n    action: local\n"
         )
-        subprocess.run(
-            ["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
-             "-subj", "/CN=localhost", "-addext", "subjectAltName=DNS:localhost",
-             "-keyout", str(cls.directory / "tls.key"), "-out", str(cls.directory / "tls.crt")],
-            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
+        cls.audit_file = cls.directory / "audit.log"
+        cls.audit_file.write_text('type=AVC msg=audit(1:1): avc: denied { read } comm="nginx" tcontext=default_t\n')
         cls.verify = ssl.create_default_context(cafile=str(cls.directory / "tls.crt"))
         cls.process = None
-        cls.start_server(cls.token)
+        cls.start_server()
 
     @classmethod
-    def start_server(cls, token, expires_at=None):
+    def start_server(cls):
         if cls.process is not None:
             cls.process.terminate()
             cls.process.wait(timeout=15)
-        (cls.directory / "credential.json").write_text(json.dumps({
-            "token_sha256": hashlib.sha256(token.encode()).hexdigest(),
-            "expires_at": expires_at or int(time.time()) + 3600,
-        }))
-        (cls.directory / "audit-facts.json").write_text(json.dumps({
-            "status": "observed", "collected_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "events": [{"comm": "nginx", "target_context": "default_t"}], "limitations": [],
-        }))
         env = os.environ | {
             "LINUX_MCP_TRANSPORT": "http", "LINUX_MCP_HOST_MODE": "local-only",
             "LINUX_MCP_TOOLSET": "fixed", "LINUX_MCP_HOST": "127.0.0.1",
@@ -68,13 +63,14 @@ class DiagnosticsHTTPS(unittest.IsolatedAsyncioTestCase):
             "LINUX_MCP_TLS_CERT": str(cls.directory / "tls.crt"),
             "LINUX_MCP_TLS_KEY": str(cls.directory / "tls.key"),
             "LINUX_MCP_POLICY_PATH": str(cls.directory / "policy.yaml"),
-            "LINUX_MCP_ALLOWED_LOG_PATHS": str(cls.log_file),
+            "LINUX_MCP_ALLOWED_LOG_PATHS": f"{cls.log_file},{cls.audit_file}",
             "LINUX_MCP_LOG_DIR": str(cls.directory / "logs"),
-            "WEBAPP_MCP_AUDIT_SNAPSHOT": str(cls.directory / "audit-facts.json"),
-            "WEBAPP_MCP_CREDENTIAL_PATH": str(cls.directory / "credential.json"),
+            "LINUX_MCP_AUTH__PROVIDER": "jwt", "LINUX_MCP_AUTH__JWT__ISSUER": ISSUER,
+            "LINUX_MCP_AUTH__JWT__AUDIENCE": "webapp-mcp",
+            "LINUX_MCP_AUTH__JWT__JWKS_URI": f"http://localhost:{cls.jwks_server.server_port}/jwks.json",
         }
         cls.process = subprocess.Popen(
-            [sys.executable, str(SERVER)], env=env,
+            [str(SERVER)], env=env,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
         for _ in range(100):
@@ -94,6 +90,9 @@ class DiagnosticsHTTPS(unittest.IsolatedAsyncioTestCase):
         if cls.process is not None:
             cls.process.terminate()
             cls.process.wait(timeout=15)
+        cls.jwks_server.shutdown()
+        cls.jwks_server.server_close()
+        cls.jwks_thread.join()
         cls.temp.cleanup()
 
     async def session_checks(self, token):
@@ -107,17 +106,19 @@ class DiagnosticsHTTPS(unittest.IsolatedAsyncioTestCase):
                     await session.send_ping()
                     tools = await session.list_tools()
                     self.assertNotIn("run_script", {tool.name for tool in tools.tools})
-                    audit_result = await session.call_tool("get_selinux_denials", {})
+                    self.assertNotIn("get_selinux_denials", {tool.name for tool in tools.tools})
+                    audit_result = await session.call_tool("read_log_file", {
+                        "log_path": str(self.audit_file), "last_lines": 20,
+                    })
                     self.assertFalse(audit_result.isError)
-                    self.assertEqual(audit_result.structuredContent["status"], "observed")
-                    self.assertIn("default_t", str(audit_result.structuredContent))
+                    self.assertIn("default_t", str(audit_result.content))
                     result = await session.call_tool("get_disk_usage", {})
                     self.assertFalse(result.isError)
                     allowed = await session.call_tool("read_log_file", {"log_path": str(self.log_file)})
                     self.assertFalse(allowed.isError)
                     self.assertIn("permission denied", str(allowed.content))
                     bounded = await session.call_tool("read_log_file", {
-                        "log_path": str(self.log_file), "first_lines": 20000,
+                        "log_path": str(self.log_file), "first_lines": 20,
                     })
                     self.assertFalse(bounded.isError)
                     self.assertEqual(len(bounded.structuredContent["entries"]), 20)
@@ -134,16 +135,29 @@ class DiagnosticsHTTPS(unittest.IsolatedAsyncioTestCase):
             self.assertEqual((await client.get(self.url)).status_code, 401)
             self.assertEqual((await client.get(self.url, headers={"Authorization": "Bearer wrong"})).status_code, 401)
 
-    async def test_expiry_and_rotation(self):
-        self.start_server(self.token, int(time.time()) - 1)
+    async def test_jwt_claims_and_signature(self):
+        invalid_tokens = [
+            token(self.signing_key, exp=int(time.time()) - 3600),
+            token(self.signing_key, iss="https://wrong-issuer.test"),
+            token(self.signing_key, aud="other-service"),
+            token(create(self.directory / "other-issuer")),
+        ]
         async with httpx.AsyncClient(verify=self.verify, trust_env=False) as client:
-            self.assertEqual((await client.get(self.url, headers={"Authorization": f"Bearer {self.token}"})).status_code, 401)
-        replacement = secrets.token_hex(32)
-        self.start_server(replacement)
-        async with httpx.AsyncClient(verify=self.verify, trust_env=False) as client:
-            self.assertEqual((await client.get(self.url, headers={"Authorization": f"Bearer {self.token}"})).status_code, 401)
-        await self.session_checks(replacement)
-        self.start_server(self.token)
+            for credential in invalid_tokens:
+                with self.subTest(credential_type="invalid JWT"):
+                    self.assertEqual((await client.get(self.url, headers={
+                        "Authorization": f"Bearer {credential}",
+                    })).status_code, 401)
+        # Valid JWTs for another client or a rotated-out token must fail policy.
+        for claims in ({"azp": "other-client"}, {"jti": "rotated-out-token"}):
+            async with httpx.AsyncClient(verify=self.verify, trust_env=False, headers={
+                "Authorization": f"Bearer {token(self.signing_key, **claims)}",
+            }) as client:
+                async with streamable_http_client(self.url, http_client=client) as (read, write, _):
+                    async with ClientSession(read, write) as session:
+                        await session.initialize()
+                        result = await session.call_tool("get_disk_usage", {})
+                        self.assertTrue(result.isError)
 
     @unittest.skipUnless(os.environ.get("WEBAPP_MCP_AO_IMAGE"), "Set WEBAPP_MCP_AO_IMAGE for the shipped AO adapter check")
     async def test_shipped_ao_adapter(self):

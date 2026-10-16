@@ -6,7 +6,6 @@ webapp_mcp_material_lookup: >-
   {{ lookup('ansible.builtin.file', lookup('ansible.builtin.env', 'WEBAPP_MCP_MATERIAL_FILE')) | from_json
      if lookup('ansible.builtin.env', 'WEBAPP_MCP_MATERIAL_FILE') | length > 0 else {} }}
 webapp_mcp_tools:
-  - get_selinux_denials
   - get_service_status
   - get_service_logs
   - get_journal_logs

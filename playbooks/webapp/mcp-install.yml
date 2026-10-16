@@ -6,9 +6,11 @@
   vars_files:
     - ../../group_vars/webapps.yml
   handlers:
-    - name: Reload audit collector units
-      ansible.builtin.systemd_service:
-        daemon_reload: true
+    - name: Reload audit configuration
+      # RHEL requires the service command for auditd signal handling.
+      ansible.builtin.command:
+        argv: [service, auditd, reload]
+      changed_when: true
     - name: Restart webapp MCP
       ansible.builtin.systemd_service:
         name: webapp-mcp
@@ -24,28 +26,66 @@
           - webapp_mcp_state | default('present') in ['present', 'absent']
         fail_msg: Webapp MCP supports RHEL-compatible x86_64 guests with Python 3.12.
 
+    - name: Discover installed services
+      ansible.builtin.service_facts:
+
+    - name: Stop the retired audit refresh timer
+      ansible.builtin.systemd_service:
+        name: webapp-mcp-audit.timer
+        enabled: false
+        state: stopped
+      when: "'webapp-mcp-audit.service' in ansible_facts['services']"
+
+    - name: Stop the retired audit collector
+      ansible.builtin.systemd_service:
+        name: webapp-mcp-audit.service
+        enabled: false
+        state: stopped
+      when: "'webapp-mcp-audit.service' in ansible_facts['services']"
+
+    - name: Remove the retired collector and authentication adapter
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/systemd/system/webapp-mcp-audit.timer
+        - /etc/systemd/system/webapp-mcp-audit.service
+        - /run/webapp-mcp-audit
+        - /opt/webapp-mcp/server.py
+        - /opt/webapp-mcp/webapp_mcp_audit.py
+        - /etc/webapp-mcp/credential.json
+
     - name: Stop diagnostics when disabled
       when: webapp_mcp_state | default('present') == 'absent'
       block:
-        - name: Discover installed services
-          ansible.builtin.service_facts:
-        - name: Stop the installed audit refresh timer
+        - name: Stop and disable the installed diagnostics service
           ansible.builtin.systemd_service:
-            name: webapp-mcp-audit.timer
+            name: webapp-mcp
+            daemon_reload: true
             enabled: false
             state: stopped
-          when: "'webapp-mcp-audit.service' in ansible_facts['services']"
-        - name: Stop and disable installed diagnostics services
-          ansible.builtin.systemd_service:
-            name: "{{ item }}"
-            enabled: false
-            state: stopped
-          loop: [webapp-mcp.service, webapp-mcp-audit.service]
-          when: item in ansible_facts['services']
-        - name: Remove the bounded audit snapshot when disabled
+          when: "'webapp-mcp.service' in ansible_facts['services']"
+        - name: Restore root-only audit log rotation
+          ansible.builtin.lineinfile:
+            path: /etc/audit/auditd.conf
+            regexp: '^log_group\s*='
+            line: log_group = root
+          when: "'auditd.service' in ansible_facts['services']"
+          notify: Reload audit configuration
+        - name: Restore root-only audit file access
           ansible.builtin.file:
-            path: /run/webapp-mcp-audit
-            state: absent
+            path: /var/log/audit/audit.log
+            owner: root
+            group: root
+            mode: '0600'
+          when: "'auditd.service' in ansible_facts['services']"
+        - name: Restore root-only audit directory access
+          ansible.builtin.file:
+            path: /var/log/audit
+            owner: root
+            group: root
+            mode: '0700'
+          when: "'auditd.service' in ansible_facts['services']"
         - name: Close the diagnostics firewall port
           ansible.posix.firewalld:
             port: 8443/tcp
@@ -65,7 +105,10 @@
         - name: Validate bootstrap-supplied service material
           ansible.builtin.assert:
             that:
-              - webapp_mcp_material_lookup.token_sha256 is match('^[0-9a-f]{64}$')
+              - webapp_mcp_material_lookup.jwt_issuer is match('^https?://')
+              - webapp_mcp_material_lookup.jwt_jwks_uri is match('^https?://')
+              - webapp_mcp_material_lookup.jwt_ca | length > 0
+              - webapp_mcp_material_lookup.jwt_id is match('^[a-zA-Z0-9:_-]+$')
               - webapp_mcp_material_lookup.expires_at | int > ansible_facts['date_time']['epoch'] | int
               - webapp_mcp_material_lookup.tls_cert | length > 0
               - webapp_mcp_material_lookup.tls_key | length > 0
@@ -74,7 +117,20 @@
 
         - name: Install the isolated runtime and diagnostic command dependencies
           ansible.builtin.package:
-            name: [python3.12, python3.12-pip, acl, iproute, procps-ng, firewalld]
+            name:
+              - python3.12
+              - python3.12-pip
+              - acl
+              - audit
+              - ca-certificates
+              - coreutils
+              - grep
+              - hostname
+              - iproute
+              - procps-ng
+              - systemd
+              - util-linux
+              - firewalld
             state: present
 
         - name: Create the diagnostics group
@@ -126,35 +182,12 @@
             extra_args: '--require-hashes --only-binary=:all:'
           notify: Restart webapp MCP
 
-        - name: Install the AO bearer authentication adapter
-          ansible.builtin.copy:
-            src: webapp-mcp-server.py
-            dest: /opt/webapp-mcp/server.py
-            owner: root
-            group: root
-            mode: '0644'
-          notify: Restart webapp MCP
+        - name: Read the system CA bundle for issuer verification
+          ansible.builtin.slurp:
+            src: /etc/pki/tls/certs/ca-bundle.crt
+          register: webapp_mcp_system_ca
 
-        - name: Install the fixed audit projection collector
-          ansible.builtin.copy:
-            src: webapp_mcp_audit.py
-            dest: /opt/webapp-mcp/webapp_mcp_audit.py
-            owner: root
-            group: root
-            mode: '0644'
-          notify: Restart webapp MCP
-
-        - name: Configure the local audit collector and refresh timer
-          ansible.builtin.template:
-            src: "{{ item }}.j2"
-            dest: "/etc/systemd/system/{{ item }}"
-            owner: root
-            group: root
-            mode: '0644'
-          loop: [webapp-mcp-audit.service, webapp-mcp-audit.timer]
-          notify: Reload audit collector units
-
-        - name: Install guest credential digest and TLS material
+        - name: Install public JWT trust and TLS material
           ansible.builtin.copy:
             dest: "/etc/webapp-mcp/{{ item.name }}"
             content: "{{ item.content }}"
@@ -162,10 +195,8 @@
             group: mcpdiag
             mode: '0640'
           loop:
-            - name: credential.json
-              content: >-
-                {{ {'token_sha256': webapp_mcp_material_lookup.token_sha256,
-                    'expires_at': webapp_mcp_material_lookup.expires_at | int} | to_json }}
+            - name: jwt-ca.crt
+              content: "{{ webapp_mcp_system_ca.content | b64decode }}\n{{ webapp_mcp_material_lookup.jwt_ca }}"
             - name: tls.crt
               content: "{{ webapp_mcp_material_lookup.tls_cert }}"
             - name: tls.key
@@ -217,6 +248,33 @@
             state: present
           loop: [access.log, error.log]
 
+        - name: Configure read access for auditd-created logs
+          ansible.builtin.lineinfile:
+            path: /etc/audit/auditd.conf
+            regexp: '^log_group\s*='
+            line: log_group = mcpdiag
+          notify: Reload audit configuration
+
+        - name: Allow diagnostics to traverse the audit directory
+          ansible.builtin.file:
+            path: /var/log/audit
+            owner: root
+            group: mcpdiag
+            mode: '0750'
+
+        - name: Enable native audit logging
+          ansible.builtin.systemd_service:
+            name: auditd
+            enabled: true
+            state: started
+
+        - name: Allow diagnostics to read the current audit log
+          ansible.builtin.file:
+            path: /var/log/audit/audit.log
+            owner: root
+            group: mcpdiag
+            mode: '0640'
+
         - name: Preserve HTTP and SSH while opening diagnostics before firewall startup
           ansible.posix.firewalld:
             port: "{{ item }}/tcp"
@@ -234,13 +292,6 @@
 
         - name: Apply pending service configuration
           ansible.builtin.meta: flush_handlers
-
-        - name: Enable the bounded audit snapshot refresh
-          ansible.builtin.systemd_service:
-            name: webapp-mcp-audit.timer
-            daemon_reload: true
-            enabled: true
-            state: started
 
         - name: Enable the diagnostics service
           ansible.builtin.systemd_service:

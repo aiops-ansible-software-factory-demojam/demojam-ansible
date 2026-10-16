@@ -1,7 +1,8 @@
 {{ ansible_managed | comment }}
 rules:
   - claims:
-      client_id: demojam-ao-rca
+      azp: demojam-ao-rca
+      jti: "{{ webapp_mcp_material_lookup.jwt_id }}"
     host: localhost
     tools:
 {% for tool in webapp_mcp_tools %}

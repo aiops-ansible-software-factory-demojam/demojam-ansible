@@ -161,51 +161,55 @@ task output. `affected_host_facts` is the new artifact; the existing
 workflow updates. `molecule test -s logic-audit-facts` exercises oversized Unicode
 records, unavailable collection, benign entries and idempotence locally.
 
-The CNV or AWS webapp can run native, read-only Linux MCP diagnostics. AAP's
-`webapp_mcp` template applies `playbooks/webapp/mcp-install.yml` after nginx and
-the RHEL repositories are configured. It installs Python 3.12 dependencies from
-the hashed Linux x86_64 lock, runs as `mcpdiag` under systemd, and serves TLS on
-8443. It has journal access and read ACLs for nginx logs, including newly rotated
-logs. It has no sudo or capabilities. General file reads and script execution
-are excluded by the server policy. Service/journal requests are restricted to
-nginx and log reads are capped at 20 lines.
+The CNV or AWS webapp runs the stock `linux-mcp-server==1.7.0` executable
+under systemd as `mcpdiag`, using its built-in Streamable HTTP, TLS and JWT
+support. AAP's `webapp_mcp` template applies `playbooks/webapp/mcp-install.yml`
+after nginx and the RHEL repositories are configured. Python 3.12 dependencies
+come from the hashed Linux x86_64 lock. There is no custom server, audit
+collector, timer, snapshot or SELinux MCP tool.
 
-`get_selinux_denials` reads a root-owned snapshot rather than the raw audit file.
-A fixed local systemd collector reads at most 64 KiB from the current audit file
-every five seconds. It filters recent nginx AVC denials and emits at most four
-events and 3,000 characters, with current enforcement mode and explicit scope,
-truncation and collection limitations. Atomic root-owned mode-0640 publication
-allows `mcpdiag` to read the snapshot without writing it or reading raw audit
-records. Snapshots older than 30 seconds are unavailable. No request-supplied
-paths, commands or privilege elevation are accepted. Disabling MCP stops the
-collector timer/service and removes the runtime snapshot. AAP remains the
-independent audit fallback.
+Native `read_log_file` reads `/var/log/audit/audit.log` and the two nginx logs.
+The account has journal access and read access to auditd's current log;
+`log_group = mcpdiag` preserves access after auditd rotation. Files stay
+root-owned and the daemon has no sudo, capabilities or audit-log write access.
+The native policy allows nine diagnostic tools on localhost and excludes
+script execution and general file reads. Service/journal tools retain their
+native scope. The workflow requests at most 20 log lines; the upstream tool's
+own limits apply, without our former 20-line/3000-character enforcement or
+nginx-only argument middleware. Audit reads can include other host events.
 
-`tests/test_webapp_mcp_audit.py` covers filtering, size limits, freshness and
-unavailable sources. The guest scenario uses a clearly synthetic audit fixture
-in its disposable VM; it verifies tool access, reboot persistence, raw audit
-read denial, idempotence and cleanup.
+Red Hat describes RHEL MCP as a Developer Preview and documents an AI-client-side
+STDIO/SSH setup. This AO integration uses the package's native HTTPS transport
+on the guest. See [RHEL MCP documentation alignment](docs/rhel-mcp.md) for that
+difference, platform coverage and the rollout sequence.
 
-Bootstrap supplies `Demo Webapp MCP` with a private JSON file containing the
-machine credential's SHA-256 digest/expiry and TLS certificate/key/CA. Inventory
-resolves `WEBAPP_MCP_MATERIAL_FILE`; the playbook consumes that value. The
-plaintext bearer token and CA signing key never reach the guest. The API
-credential expires after 90 days and is rotated through bootstrap; it is not
-an OAuth access token. AO 2026.8's MCP adapter accepts stored bearer credentials
-and cannot renew Keycloak access tokens. A small FastMCP `TokenVerifier` adapter
-implements authentication while retaining Linux MCP's tool authorization.
+Bootstrap issues a 90-day client-credentials JWT from the existing demo
+Keycloak's dedicated `demojam-ao-rca` client. The stock verifier checks the
+signature, issuer, audience and expiry against Keycloak's HTTPS JWKS endpoint.
+The native tool policy also requires the current token ID (`jti`); rotation
+replaces that ID and denies the old token access to tools. AO stores the bearer
+credential separately for discovery and workflow execution and cannot renew
+it itself. Bootstrap preserves material across reruns and renews tokens within
+one day of expiry; `make webapp-mcp-rotate` forces renewal.
 
-`webapp_mcp_state: absent` stops/disables the daemon, closes the firewall port,
-and removes guest credential/TLS material while preserving nginx. Follow the
-`openshift-gitops` maintenance commands to enable, verify, rotate or disable
-the integration before changing the service. AWS defaults to audit-only RCA;
-set `WEBAPP_MCP_ENABLED=true` in openshift-gitops to enable its managed EC2 path.
+Inventory resolves `WEBAPP_MCP_MATERIAL_FILE`. The guest receives only public
+JWT trust/claims and the TLS certificate/key/CA, with the system CA bundle plus
+the cluster ingress CA for JWKS verification. The bearer token, Keycloak client
+secret and CA signing key stay out of the guest. Guest connectivity to the
+public Keycloak Route is required. No runtime token-verification code is added.
 
-Functional checks:
+`webapp_mcp_state: absent` stops the daemon, closes 8443, removes TLS material
+and restores root-only audit-log access, while preserving nginx and auditd.
+Setup removes retired collector units, code and snapshot files on existing
+installations. AAP remains the independent fallback if native MCP audit reads
+are unavailable. AWS defaults to audit-only RCA; set `WEBAPP_MCP_ENABLED=true`
+in openshift-gitops to enable its managed EC2 path.
+
+Functional checks (install the locked requirements in `.venv` first):
 
 ```bash
 molecule test -s playbook-webapp-mcp
-python tests/test_webapp_mcp.py -v
+.venv/bin/python tests/test_webapp_mcp.py -v
 ```
 
 Run Python checks in an isolated environment with dependencies from
@@ -215,7 +219,7 @@ adapter and runtime tool provider. Molecule uses the pinned provisioner and a
 checksum-pinned Rocky Linux 9 QEMU guest. `PROVISIONER=podman` selects the
 alternative systemd container on hosts with working cgroup delegation. It tests the
 production playbook, idempotence, authenticated diagnostics, denied access,
-and shutdown without breaking nginx. RHEL/CNV networking, guest reboot and
+auditd/nginx rotation, reboot persistence and shutdown without breaking nginx. RHEL/CNV networking and
 the full outage workflow require the installed demo as additional checks.
 
 To regenerate the dependency lock on Linux x86_64 with Python 3.12, resolve

@@ -7,9 +7,30 @@
   become: true
   gather_facts: false
   tasks:
-    - name: Require production setup to supply the firewall dependency
+    - name: Find the disposable Rocky guest repository definitions
+      ansible.builtin.find:
+        paths: /etc/yum.repos.d
+        patterns: rocky*.repo
+      register: mcp_fixture_repos
+    - name: Disable random mirrors in the disposable guest
+      ansible.builtin.replace:
+        path: "{{ item.path }}"
+        regexp: '^mirrorlist='
+        replace: '#mirrorlist='
+      loop: "{{ mcp_fixture_repos.files }}"
+      loop_control:
+        label: "{{ item.path }}"
+    - name: Use the vendor HTTPS endpoint for disposable guest packages
+      ansible.builtin.replace:
+        path: "{{ item.path }}"
+        regexp: '^#baseurl=http://dl.rockylinux.org/'
+        replace: baseurl=https://dl.rockylinux.org/
+      loop: "{{ mcp_fixture_repos.files }}"
+      loop_control:
+        label: "{{ item.path }}"
+    - name: Require production setup to supply firewall and hostname dependencies
       ansible.builtin.package:
-        name: [firewalld, python3-firewall]
+        name: [firewalld, python3-firewall, hostname]
         state: absent
     - name: Install the guest fixture services
       ansible.builtin.package:
@@ -21,6 +42,29 @@
         state: started
         enabled: true
       loop: [nginx]
+    - name: Seed a retired collector unit for the upgrade test
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/webapp-mcp-audit.service
+        mode: '0644'
+        content: |
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/bin/true
+    - name: Seed the retired collector schedule for the upgrade test
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/webapp-mcp-audit.timer
+        mode: '0644'
+        content: |
+          [Timer]
+          OnBootSec=1h
+          [Install]
+          WantedBy=timers.target
+    - name: Enable the retired schedule before running the production migration
+      ansible.builtin.systemd_service:
+        name: webapp-mcp-audit.timer
+        daemon_reload: true
+        enabled: true
+        state: started
     - name: Read the fixture guest clock
       ansible.builtin.command:
         argv: [date, '+%s']
@@ -44,46 +88,46 @@
           type=AVC msg=audit({{ mcp_fixture_epoch.stdout }}.123:4242): avc: denied { read } for
           comm="nginx" name="molecule-audit-fixture" scontext=system_u:system_r:httpd_t:s0
           tcontext=unconfined_u:object_r:default_t:s0 tclass=file permissive=0
-    - name: Create a localhost certificate for the HTTPS test
+    - name: Generate test-only JWT issuer and TLS material
       ansible.builtin.command:
         argv:
-          - openssl
-          - req
-          - -x509
-          - -newkey
-          - rsa:2048
-          - -nodes
-          - -days
-          - '1'
-          - -subj
-          - /CN=localhost
-          - -addext
-          - subjectAltName=DNS:localhost
-          - -keyout
-          - /tmp/mcp-test.key
-          - -out
-          - /tmp/mcp-test.crt
-        creates: /tmp/mcp-test.crt
-      no_log: true
-    - name: Read the fixture certificate
-      ansible.builtin.slurp:
-        src: /tmp/mcp-test.crt
-      register: mcp_fixture_certificate
-    - name: Read the fixture private key
-      ansible.builtin.slurp:
-        src: /tmp/mcp-test.key
-      register: mcp_fixture_key
-      no_log: true
-    - name: Save test-only material for the production inventory interface
-      ansible.builtin.copy:
-        dest: "{{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/mcp-material.json"
-        content: >-
-          {{ {'token_sha256': 'molecule-diagnostics-token' | hash('sha256'),
-              'expires_at': 2000000000,
-              'tls_cert': mcp_fixture_certificate.content | b64decode,
-              'tls_key': mcp_fixture_key.content | b64decode,
-              'ca_cert': mcp_fixture_certificate.content | b64decode} | to_json }}
-        mode: '0600'
+          - "{{ playbook_dir }}/../../.venv/bin/python"
+          - "{{ playbook_dir }}/../../tests/mcp_jwt_fixture.py"
+          - "{{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}"
       delegate_to: localhost
       become: false
+      changed_when: true
       no_log: true
+    - name: Create the test issuer public directory
+      ansible.builtin.file:
+        path: /var/lib/mcp-test-jwks
+        state: directory
+        mode: '0755'
+    - name: Install the test issuer public keys
+      ansible.builtin.copy:
+        src: "{{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/jwks.json"
+        dest: /var/lib/mcp-test-jwks/jwks.json
+        mode: '0644'
+    - name: Install a signing key only in the disposable test guest
+      ansible.builtin.copy:
+        src: "{{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/signing.key"
+        dest: /root/mcp-test-signing.key
+        mode: '0600'
+      no_log: true
+    - name: Configure the test-only JWKS endpoint
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/mcp-test-jwks.service
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Disposable test issuer public keys
+          [Service]
+          ExecStart=/usr/bin/python3 -m http.server 8765 --bind 127.0.0.1 --directory /var/lib/mcp-test-jwks
+          [Install]
+          WantedBy=multi-user.target
+    - name: Enable the test-only issuer across the reboot test
+      ansible.builtin.systemd_service:
+        name: mcp-test-jwks
+        daemon_reload: true
+        enabled: true
+        state: started
