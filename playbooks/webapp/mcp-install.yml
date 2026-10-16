@@ -26,6 +26,20 @@
           - webapp_mcp_state | default('present') in ['present', 'absent']
         fail_msg: Webapp MCP supports RHEL-compatible x86_64 guests with Python 3.12.
 
+    - name: Validate bootstrap-supplied service material before changing the host
+      when: webapp_mcp_state | default('present') == 'present'
+      ansible.builtin.assert:
+        that:
+          - webapp_mcp_material_lookup.jwt_issuer is match('^https?://')
+          - webapp_mcp_material_lookup.jwt_jwks_uri is match('^https?://')
+          - webapp_mcp_material_lookup.jwt_ca | length > 0
+          - webapp_mcp_material_lookup.jwt_id is match('^[a-zA-Z0-9:_-]+$')
+          - webapp_mcp_material_lookup.expires_at | int > ansible_facts['date_time']['epoch'] | int
+          - webapp_mcp_material_lookup.tls_cert | length > 0
+          - webapp_mcp_material_lookup.tls_key | length > 0
+          - webapp_mcp_material_lookup.ca_cert | length > 0
+      no_log: true
+
     - name: Discover installed services
       ansible.builtin.service_facts:
 
@@ -102,19 +116,6 @@
     - name: Install and configure diagnostics
       when: webapp_mcp_state | default('present') == 'present'
       block:
-        - name: Validate bootstrap-supplied service material
-          ansible.builtin.assert:
-            that:
-              - webapp_mcp_material_lookup.jwt_issuer is match('^https?://')
-              - webapp_mcp_material_lookup.jwt_jwks_uri is match('^https?://')
-              - webapp_mcp_material_lookup.jwt_ca | length > 0
-              - webapp_mcp_material_lookup.jwt_id is match('^[a-zA-Z0-9:_-]+$')
-              - webapp_mcp_material_lookup.expires_at | int > ansible_facts['date_time']['epoch'] | int
-              - webapp_mcp_material_lookup.tls_cert | length > 0
-              - webapp_mcp_material_lookup.tls_key | length > 0
-              - webapp_mcp_material_lookup.ca_cert | length > 0
-          no_log: true
-
         - name: Install the isolated runtime and diagnostic command dependencies
           ansible.builtin.package:
             name:

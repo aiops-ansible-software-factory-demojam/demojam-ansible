@@ -37,7 +37,6 @@ async def main():
                 })
                 assert not audit.isError, str(audit.content)
                 assert "molecule-audit-fixture" in str(audit.content)
-                assert len(audit.structuredContent["entries"]) <= 20
                 service = await session.call_tool("get_service_status", {"service_name": "nginx"})
                 assert not service.isError and "running" in str(service.content)
                 system = await session.call_tool("get_system_information", {})

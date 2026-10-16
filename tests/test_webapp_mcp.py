@@ -49,7 +49,10 @@ class DiagnosticsHTTPS(unittest.IsolatedAsyncioTestCase):
             "    host: localhost\n    tools: [get_disk_usage, read_log_file]\n    action: local\n"
         )
         cls.audit_file = cls.directory / "audit.log"
-        cls.audit_file.write_text('type=AVC msg=audit(1:1): avc: denied { read } comm="nginx" tcontext=default_t\n')
+        # ENRICHED audit records contain a group separator. The upstream tool
+        # splits that into multiple entries per physical line; retain its behavior.
+        cls.audit_file.write_text(('type=AVC msg=audit(1:1): avc: denied { read } '
+                                   'comm="nginx" tcontext=default_t\x1dUID="root"\n') * 40)
         cls.verify = ssl.create_default_context(cafile=str(cls.directory / "tls.crt"))
         cls.process = None
         cls.start_server()
