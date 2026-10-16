@@ -26,6 +26,12 @@ async def main():
         async with streamable_http_client("https://localhost:8443/mcp", http_client=client) as (read, write, _):
             async with ClientSession(read, write) as session:
                 await session.initialize()
+                # Append after reboot, just before reading: boot audit traffic
+                # can push an earlier fixture out of the requested 20-line tail.
+                # Keep auditd's inode intact while adding this test-only record.
+                with Path("/var/log/audit/audit.log").open("a") as audit_log:
+                    audit_log.write('type=AVC msg=audit(1:4242): avc: denied { read } '
+                                    'comm="nginx" name="molecule-audit-fixture" tcontext=default_t\n')
                 audit = await session.call_tool("read_log_file", {
                     "log_path": "/var/log/audit/audit.log", "last_lines": 20,
                 })

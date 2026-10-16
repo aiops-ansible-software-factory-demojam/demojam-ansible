@@ -37,6 +37,9 @@ class DiagnosticsHTTPS(unittest.IsolatedAsyncioTestCase):
         cls.token = token(cls.signing_key)
         cls.jwks_server = ThreadingHTTPServer(("127.0.0.1", 0), partial(
             SimpleHTTPRequestHandler, directory=str(cls.directory)))
+        issuer_tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        issuer_tls.load_cert_chain(cls.directory / "tls.crt", cls.directory / "tls.key")
+        cls.jwks_server.socket = issuer_tls.wrap_socket(cls.jwks_server.socket, server_side=True)
         cls.jwks_thread = Thread(target=cls.jwks_server.serve_forever, daemon=True)
         cls.jwks_thread.start()
         cls.log_file = cls.directory / "nginx-error.log"
@@ -67,7 +70,8 @@ class DiagnosticsHTTPS(unittest.IsolatedAsyncioTestCase):
             "LINUX_MCP_LOG_DIR": str(cls.directory / "logs"),
             "LINUX_MCP_AUTH__PROVIDER": "jwt", "LINUX_MCP_AUTH__JWT__ISSUER": ISSUER,
             "LINUX_MCP_AUTH__JWT__AUDIENCE": "webapp-mcp",
-            "LINUX_MCP_AUTH__JWT__JWKS_URI": f"http://localhost:{cls.jwks_server.server_port}/jwks.json",
+            "LINUX_MCP_AUTH__JWT__JWKS_URI": f"https://localhost:{cls.jwks_server.server_port}/jwks.json",
+            "SSL_CERT_FILE": str(cls.directory / "tls.crt"),
         }
         cls.process = subprocess.Popen(
             [str(SERVER)], env=env,

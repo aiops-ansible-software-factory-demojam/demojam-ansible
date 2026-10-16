@@ -22,12 +22,6 @@
       ansible.builtin.wait_for:
         path: /var/log/audit/audit.log.1
         timeout: 15
-    - name: Put a synthetic denial in the newly rotated audit log
-      ansible.builtin.lineinfile:
-        path: /var/log/audit/audit.log
-        line: >-
-          type=AVC msg=audit(1:4242): avc: denied { read } for comm="nginx"
-          name="molecule-audit-fixture" tcontext=unconfined_u:object_r:default_t:s0
     - name: Reboot the VM to verify service persistence
       ansible.builtin.reboot:
         reboot_timeout: 180
