@@ -1,0 +1,6 @@
+---
+collections:
+  - name: david_igou.molecule_provisioners
+    version: 0.0.7-alpha
+  - name: ansible.posix
+    version: 2.2.2

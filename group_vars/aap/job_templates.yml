@@ -3,6 +3,21 @@ controller_templates: >-
   {{ demo_controller_templates | rejectattr('name', 'equalto', 'openshift_virtualization_machine') | list
      if demo_backend == 'aws' else demo_controller_templates }}
 demo_controller_templates:
+  - name: webapp_mcp
+    description: Install or disable read-only MCP diagnostics on the webapp guest
+    organization: demo
+    project: demojam-ansible
+    inventory: demo-inventory
+    execution_environment: demo-aap-ee
+    job_type: run
+    playbook: playbooks/webapp/mcp-install.yml
+    credentials:
+      - demo-webapp-ssh
+      - demo-webapp-mcp
+    become_enabled: true
+    ask_variables_on_launch: true
+    extra_vars:
+      demo_backend: "{{ demo_backend }}"
   - name: openshift_virtualization_machine
     description: Create or remove a demo VM in automation-vms
     organization: demo
@@ -71,7 +86,7 @@ demo_controller_templates:
     ask_variables_on_launch: true
     allow_simultaneous: false
   - name: pull_audit_logs
-    description: Retrieve recent nginx-related audit log entries from the impacted webapp host
+    description: Publish bounded SELinux audit facts from the impacted webapp host
     organization: demo
     project: demojam-ansible
     inventory: demo-inventory

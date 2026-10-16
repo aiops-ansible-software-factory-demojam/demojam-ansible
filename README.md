@@ -48,7 +48,7 @@ changes can use `make aap-sync`; the foundation changes remain in openshift-gito
 The dispatch credential provides `AAP_HOST`, `AAP_USERNAME`, `AAP_PASSWORD`,
 `AAP_EE_IMAGE`, `DEMO_OIDC_ISSUER`, `DEMO_OIDC_CLIENT_SECRET`, `DEMO_VM_API_HOST`,
 `DEMO_VM_API_TOKEN`, `DEMO_VM_API_CA`, `DEMO_VM_SSH_PRIVATE`,
-`DEMO_VM_SSH_PUBLIC`, `DEMO_RHEL_ENTITLEMENT_FILE`, `DEMO_EDA_WEBHOOK_TOKEN`,
+`DEMO_VM_SSH_PUBLIC`, `DEMO_RHEL_ENTITLEMENT_FILE`, `DEMO_WEBAPP_MCP_MATERIAL`, `DEMO_EDA_WEBHOOK_TOKEN`,
 `DEMO_FORGEJO_EDA_WEBHOOK_TOKEN`, and `DEMO_FORGEJO_TOKEN`. The entitlement is injected as a private file to avoid process environment size
 limits. These inputs are required;
 missing material fails before any AAP objects are changed.
@@ -137,8 +137,10 @@ activation so updated rulebooks take effect.
 `rulebooks/webapp-alert-issue.yml` accepts firing `WebappDown` notifications
 from `blackbox-exporter` and starts `call_ao_webhook` with the original alert
 payload. Its AO service-account credential authenticates the call to the
-`alertmanagealert` trigger. AO runs `pull_audit_logs`, asks the configured model
-for a diagnosis, then launches `webapp_alert_issue` with the alert and diagnosis.
+`alertmanagealert` trigger. AO asks the configured model to investigate with MCP audit diagnostics first.
+It runs `pull_audit_logs` only when MCP is disabled or the primary/audit evidence
+is unavailable, then uses text-only RCA. One completed diagnosis reaches
+`webapp_alert_issue` with the original alert.
 The workflow and the policy allowing AAP to reach AO are in openshift-gitops.
 
 The issue destination is fixed in `group_vars/aap/webapp_issue.yml`: Forgejo collection repository
@@ -147,6 +149,85 @@ only into the issue job. Existing open outage issues are reused; template
 execution is serialized. Resolved notifications do not close issues.
 
 ## Incident remediation
+
+### Live diagnostics for AO RCA
+
+The `pull_audit_logs` job publishes structured SELinux facts capped at 3,000
+characters, including current enforcement mode, collection time, up to four
+recent AVC events and explicit truncation/collection limitations. Only selected
+event fields are included; raw audit stdout stays out of RCA prompts and AAP
+task output. `affected_host_facts` is the new artifact; the existing
+`affected_host_log_output` also carries that compact JSON during coordinated
+workflow updates. `molecule test -s logic-audit-facts` exercises oversized Unicode
+records, unavailable collection, benign entries and idempotence locally.
+
+The CNV or AWS webapp runs the stock `linux-mcp-server==1.7.0` executable
+under systemd as `mcpdiag`, using its built-in Streamable HTTP, TLS and JWT
+support. AAP's `webapp_mcp` template applies `playbooks/webapp/mcp-install.yml`
+after nginx and the RHEL repositories are configured. Python 3.12 dependencies
+come from the hashed Linux x86_64 lock. There is no custom server, audit
+collector, timer, snapshot or SELinux MCP tool.
+
+Native `read_log_file` reads `/var/log/audit/audit.log` and the two nginx logs.
+The account has journal access and read access to auditd's current log;
+`log_group = mcpdiag` preserves access after auditd rotation. Files stay
+root-owned and the daemon has no sudo, capabilities or audit-log write access.
+The native policy allows nine diagnostic tools on localhost and excludes
+script execution and general file reads. Service/journal tools retain their
+native scope. The workflow requests at most 20 log lines; the upstream tool's
+own limits apply, without our former 20-line/3000-character enforcement or
+nginx-only argument middleware. Audit reads can include other host events.
+
+Red Hat describes RHEL MCP as a Developer Preview and documents an AI-client-side
+STDIO/SSH setup. This AO integration uses the package's native HTTPS transport
+on the guest. See [RHEL MCP documentation alignment](docs/rhel-mcp.md) for that
+difference, platform coverage and the rollout sequence.
+
+Bootstrap issues a 90-day client-credentials JWT from the existing demo
+Keycloak's dedicated `demojam-ao-rca` client. The stock verifier checks the
+signature, issuer, audience and expiry against Keycloak's HTTPS JWKS endpoint.
+The native tool policy also requires the current token ID (`jti`); rotation
+replaces that ID and denies the old token access to tools. AO stores the bearer
+credential separately for discovery and workflow execution and cannot renew
+it itself. Bootstrap preserves material across reruns and renews tokens within
+one day of expiry; `make webapp-mcp-rotate` forces renewal.
+
+Inventory resolves `WEBAPP_MCP_MATERIAL_FILE`. The guest receives only public
+JWT trust/claims and the TLS certificate/key/CA, with the system CA bundle plus
+the cluster ingress CA for JWKS verification. The bearer token, Keycloak client
+secret and CA signing key stay out of the guest. Guest connectivity to the
+public Keycloak Route is required. No runtime token-verification code is added.
+
+`webapp_mcp_state: absent` stops the daemon, closes 8443, removes TLS material
+and restores root-only audit-log access, while preserving nginx and auditd.
+Setup removes retired collector units, code and snapshot files on existing
+installations. AAP remains the independent fallback if native MCP audit reads
+are unavailable. AWS defaults to audit-only RCA; set `WEBAPP_MCP_ENABLED=true`
+in openshift-gitops to enable its managed EC2 path.
+
+Functional checks (install the locked requirements in `.venv` first):
+
+```bash
+molecule test -s playbook-webapp-mcp
+.venv/bin/python tests/test_webapp_mcp.py -v
+```
+
+Run Python checks in an isolated environment with dependencies from
+`playbooks/webapp/files/webapp-mcp-requirements.txt`. Set `WEBAPP_MCP_AO_IMAGE`
+to the pinned AO backend image to exercise its shipped health/discovery
+adapter and runtime tool provider. Molecule uses the pinned provisioner and a
+checksum-pinned Rocky Linux 9 QEMU guest. `PROVISIONER=podman` selects the
+alternative systemd container on hosts with working cgroup delegation. It tests the
+production playbook, idempotence, authenticated diagnostics, denied access,
+auditd/nginx rotation, reboot persistence and shutdown without breaking nginx. RHEL/CNV networking and
+the full outage workflow require the installed demo as additional checks.
+
+To regenerate the dependency lock on Linux x86_64 with Python 3.12, resolve
+`linux-mcp-server==1.7.0 fastmcp==3.4.8` using
+`pip install --dry-run --ignore-installed --report report.json`. Record every
+selected package/version with its `download_info.archive_info.hashes.sha256`
+in the lock, then install with `--require-hashes --only-binary=:all:` and rerun
+the checks. Treat a new dependency resolution as a reviewed update.
 
 Bootstrap also configures a separate authenticated Forgejo event stream and
 the `forgejo-issue-remediation.yml` rulebook. The repository's issue webhook

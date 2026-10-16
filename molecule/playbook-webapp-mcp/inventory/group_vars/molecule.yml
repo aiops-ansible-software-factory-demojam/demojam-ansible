@@ -1,0 +1,4 @@
+---
+mp_backend: "{{ lookup('ansible.builtin.env', 'PROVISIONER') | default('qemu', true) }}"
+mp_podman_async_delay: 2
+mp_podman_async_retries: 300

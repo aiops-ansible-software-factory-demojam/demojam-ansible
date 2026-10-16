@@ -1,0 +1,17 @@
+---
+prerun: false
+ansible:
+  executor:
+    args:
+      ansible_playbook:
+        - --inventory=${MOLECULE_SCENARIO_DIRECTORY}/inventory/
+  playbooks:
+    converge: converge.yml
+    verify: verify.yml
+    cleanup: cleanup.yml
+scenario:
+  name: logic-audit-facts
+  # Controller-side evidence fixtures need no provisioned infrastructure.
+  test_sequence: [syntax, converge, idempotence, verify, cleanup]
+verifier:
+  name: ansible

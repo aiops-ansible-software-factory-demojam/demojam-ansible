@@ -1,0 +1,88 @@
+---
+- name: Verify guest diagnostics and permissions
+  hosts: molecule
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Verify migration stops the retired collector schedule
+      ansible.builtin.command:
+        argv: [systemctl, is-active, webapp-mcp-audit.timer]
+      register: mcp_retired_timer
+      changed_when: false
+      failed_when: mcp_retired_timer.rc == 0
+    - name: Rotate nginx logs before checking diagnostic read access
+      ansible.builtin.command:
+        argv: [logrotate, --force, --state, /tmp/mcp-logrotate.state, /etc/logrotate.d/nginx]
+      changed_when: true
+    - name: Rotate audit logs through auditd before checking native read access
+      ansible.builtin.command:
+        argv: [service, auditd, rotate]
+      changed_when: true
+    - name: Wait for auditd to finish rotating
+      ansible.builtin.wait_for:
+        path: /var/log/audit/audit.log.1
+        timeout: 15
+    - name: Reboot the VM to verify service persistence
+      ansible.builtin.reboot:
+        reboot_timeout: 180
+      when: mp_backend == 'qemu'
+    - name: Require authenticated TLS on the actual systemd service
+      ansible.builtin.uri:
+        url: https://localhost:8443/mcp
+        ca_path: /etc/webapp-mcp/ca.crt
+        status_code: 401
+      register: mcp_guest_health
+      until: mcp_guest_health.status == 401
+      retries: 12
+      delay: 5
+    - name: Verify nginx after reboot and populate its rotated access log
+      ansible.builtin.uri:
+        url: http://localhost/
+        status_code: 200
+    - name: Verify authenticated diagnostics read the rotated log
+      ansible.builtin.script:
+        cmd: ../../tests/guest_mcp_probe.py
+        executable: /opt/webapp-mcp/venv/bin/python
+      changed_when: false
+    - name: Verify the MCP account cannot write the audit file
+      ansible.builtin.command:
+        argv: [runuser, -u, mcpdiag, '--', test, -w, /var/log/audit/audit.log]
+      register: mcp_raw_audit_access
+      changed_when: false
+      failed_when: mcp_raw_audit_access.rc == 0
+    - name: Verify the daemon has no effective capabilities
+      ansible.builtin.command:
+        argv: [systemctl, show, webapp-mcp, --property=CapabilityBoundingSet, --value]
+      register: mcp_capabilities
+      changed_when: false
+    - name: Require a non-root service without capability grants
+      ansible.builtin.assert:
+        that: mcp_capabilities.stdout | length == 0
+        fail_msg: The diagnostics daemon must not have elevated capabilities.
+
+- name: Disable the installed diagnostics through the production playbook
+  ansible.builtin.import_playbook: ../../playbooks/webapp/mcp-install.yml
+  vars:
+    webapp_mcp_state: absent
+
+- name: Verify diagnostics shutdown preserves nginx
+  hosts: molecule
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Check the MCP listener is closed
+      ansible.builtin.wait_for:
+        host: localhost
+        port: 8443
+        state: stopped
+        timeout: 10
+    - name: Check nginx still serves HTTP
+      ansible.builtin.uri:
+        url: http://localhost/
+        status_code: 200
+    - name: Verify disabling diagnostics revokes audit read access
+      ansible.builtin.command:
+        argv: [runuser, -u, mcpdiag, '--', head, -c, '1', /var/log/audit/audit.log]
+      register: mcp_disabled_audit_access
+      changed_when: false
+      failed_when: mcp_disabled_audit_access.rc == 0

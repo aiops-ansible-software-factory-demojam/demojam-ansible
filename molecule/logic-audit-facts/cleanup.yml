@@ -1,0 +1,10 @@
+---
+- name: Remove isolated audit fixtures
+  hosts: webapps
+  gather_facts: false
+  tasks:
+    - name: Remove only the scenario's evidence fixtures
+      ansible.builtin.file:
+        path: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/{{ item }}"
+        state: absent
+      loop: [audit-long.log, audit-long.log.benign]

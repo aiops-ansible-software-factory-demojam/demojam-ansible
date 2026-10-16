@@ -1,0 +1,3 @@
+---
+- name: Converge the real guest diagnostics playbook
+  ansible.builtin.import_playbook: ../../playbooks/webapp/mcp-install.yml
