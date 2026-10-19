@@ -1,0 +1,46 @@
+---
+- name: Verify invoice processing and collect incident evidence
+  hosts: webapps
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Read the running application release
+      ansible.builtin.uri:
+        url: http://127.0.0.1/api/status
+        return_content: true
+      register: invoice_status
+
+    - name: Exercise normal invoice processing
+      ansible.builtin.uri:
+        url: http://127.0.0.1/api/sample
+        method: POST
+        body: ''
+        body_format: raw
+        return_content: true
+      register: invoice_normal
+
+    - name: Exercise the bounded vulnerability regression
+      ansible.builtin.uri:
+        url: http://127.0.0.1/api/regression
+        method: POST
+        body: ''
+        body_format: raw
+        return_content: true
+        timeout: 15
+      register: invoice_regression
+
+    - name: Require valid business behavior
+      ansible.builtin.assert:
+        that:
+          - invoice_normal.json.status == 'completed'
+          - "'Invoice INV-1042' in invoice_normal.json.text"
+
+    - name: Publish observed evidence
+      ansible.builtin.set_stats:
+        data:
+          invoice_findings:
+            cve: CVE-2023-36464
+            release: "{{ invoice_status.json.release }}"
+            normal: "{{ invoice_normal.json }}"
+            regression: "{{ invoice_regression.json }}"
+            affected: "{{ invoice_regression.json.status == 'timed_out' }}"

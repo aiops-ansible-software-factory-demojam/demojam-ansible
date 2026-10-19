@@ -1,0 +1,84 @@
+---
+- name: Open a deduplicated invoice remediation ticket
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    invoice_issue_url: http://forgejo.forgejo.svc.cluster.local:3000/api/v1/repos/demo-owner/ansible-collection-demo.webapp/issues
+    invoice_issue_marker: '<!-- demojam-invoice-cve-2023-36464 -->'
+  tasks:
+    - name: Require collected vulnerability evidence
+      ansible.builtin.assert:
+        that:
+          - invoice_findings.affected | bool
+          - invoice_findings.cve == 'CVE-2023-36464'
+          - invoice_findings.regression.status == 'timed_out'
+          - invoice_findings.normal.status == 'completed'
+
+    - name: Read open collection issues
+      ansible.builtin.uri:
+        url: "{{ invoice_issue_url }}?state=open&limit=50&page=1"
+        headers:
+          Authorization: "token {{ lookup('ansible.builtin.env', 'FORGEJO_API_TOKEN') }}"
+        return_content: true
+      register: invoice_open_issues
+      no_log: true
+
+    - name: Match the incident identity
+      ansible.builtin.set_fact:
+        invoice_existing_issues: "{{ invoice_open_issues.json | selectattr('body', 'search', invoice_issue_marker) | list }}"
+      no_log: true
+
+    - name: Refuse an ambiguous incident or truncated issue search
+      ansible.builtin.assert:
+        that:
+          - invoice_existing_issues | length <= 1
+          - invoice_open_issues.json | length < 50
+        fail_msg: Inspect existing issues before creating another incident.
+
+    - name: Create the automation authoring ticket
+      when: invoice_existing_issues | length == 0
+      ansible.builtin.uri:
+        url: "{{ invoice_issue_url }}"
+        method: POST
+        headers:
+          Authorization: "token {{ lookup('ansible.builtin.env', 'FORGEJO_API_TOKEN') }}"
+        body_format: json
+        body:
+          title: 'Implement tested Lightwell remediation for invoice processing'
+          body: |
+            {{ invoice_issue_marker }}
+            Root Cause: CVE-2023-36464 affects the observed PyPDF2 invoice extraction worker.
+            Normal invoices complete; the identical content stream with an EOF-terminated
+            comment exceeds the unchanged two-second extraction deadline.
+
+            Observed evidence:
+            {{ invoice_findings | to_nice_json }}
+
+            Implement playbooks/invoice-remediate.yml in this collection. The shipped
+            playbook deliberately fails until this capability is authored. Reuse
+            demo.webapp.invoice_portal as the artifact and service deployment primitive.
+            Load the trusted INVOICE_MATERIAL_FILE and INVOICE_SIGNING_KEY_FILE inputs.
+            Require the requested source SHA to match the real checkout; choose only
+            the Lightwell artifact. Use serial canary batches and stop after failure.
+            Preserve SELinux enforcing, the two-second processing deadline, document
+            fixtures, signing-key trust, and exact artifact checks. Do not patch PyPDF2
+            yourself, migrate to pypdf, replace the PDF, or change parser timeout behavior.
+            Add tests for functional processing, CVE remediation, idempotence, and recovery
+            from a failed candidate. Prove the previous healthy release is restored and
+            the failed deployment is still reported as failed.
+
+            Run ansible-lint, build the collection and run the invoice_portal Molecule
+            scenario with PROVISIONER=aws against both RHEL 9 and RHEL 10. Record actual
+            results and the committed SHA. Submit a PR; a human controls merge and AAP
+            production approval. You have no production deployment authorization.
+        status_code: 201
+        return_content: true
+      register: invoice_created_issue
+      no_log: true
+
+    - name: Publish the incident reference
+      ansible.builtin.set_stats:
+        data:
+          invoice_issue_number: "{{ invoice_created_issue.json.number if invoice_existing_issues | length == 0 else invoice_existing_issues[0].number }}"
+          invoice_issue_url: "{{ invoice_created_issue.json.html_url if invoice_existing_issues | length == 0 else invoice_existing_issues[0].html_url }}"

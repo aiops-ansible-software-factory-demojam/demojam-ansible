@@ -266,3 +266,13 @@ The generic CNV job is registered only for CNV deployments.
 Both backends provision first, run the separate permissive setup job, and then
 install the unfixed collection. Recovery remains one `webapp_nginx` launch
 after a test-gated merge, with SELinux still enforcing.
+# Invoice factory configuration
+
+The optional invoice scenario is configured by
+`playbooks/aap/configure-invoice.yml` and inventory under
+`group_vars/invoice_factory`. It adds application observation, deduplicated
+security issues, independent validation using a scoped EC2 test identity, and
+production workflows bound to a successfully tested collection SHA.
+The Forgejo EDA rule dispatches only newly opened invoice incidents to the
+invoice AO authoring workflow. See the GitOps repository's detailed
+[invoice walkthrough](https://github.com/aiops-ansible-software-factory-demojam/openshift-gitops/blob/feature/lightwell-invoice-demo/docs/invoice-lightwell-demo.md).

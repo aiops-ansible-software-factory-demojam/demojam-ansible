@@ -1,0 +1,118 @@
+---
+- name: Independently validate a published collection commit on EC2
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    invoice_repository: http://forgejo.forgejo.svc.cluster.local:3000/demo-owner/ansible-collection-demo.webapp.git
+    invoice_test_environment:
+      PROVISIONER: aws
+      INVOICE_SOURCE_COMMIT: "{{ invoice_candidate_sha }}"
+      INVOICE_MATERIAL_FILE: "{{ lookup('ansible.builtin.env', 'INVOICE_MATERIAL_FILE') }}"
+      INVOICE_SIGNING_KEY_FILE: "{{ lookup('ansible.builtin.env', 'INVOICE_SIGNING_KEY_FILE') }}"
+      ANSIBLE_COLLECTIONS_PATH: "{{ invoice_validation_directory.path }}/installed:/usr/share/ansible/collections"
+      MOLECULE_GLOB: extensions/molecule/*/molecule.yml
+  tasks:
+    - name: Validate the requested published commit
+      ansible.builtin.assert:
+        that:
+          - invoice_candidate_sha | default('') is match('^[0-9a-f]{40}$')
+          - lookup('ansible.builtin.env', 'MOLECULE_AWS_DEPLOYMENT_ID') is match('^dj-[a-f0-9]{12}$')
+          - lookup('ansible.builtin.env', 'INVOICE_MATERIAL_FILE') | length > 0
+
+    - name: Allocate an isolated validation directory
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: invoice-validation-
+      register: invoice_validation_directory
+
+    - name: Run independent candidate validation
+      block:
+        - name: Check out the exact published commit
+          ansible.builtin.git:
+            repo: "{{ invoice_repository }}"
+            dest: "{{ invoice_validation_directory.path }}/source"
+            version: "{{ invoice_candidate_sha }}"
+            verify_commit: false
+          register: invoice_checkout
+
+        - name: Require the checkout to match the requested commit
+          ansible.builtin.assert:
+            that: invoice_checkout.after == invoice_candidate_sha
+
+        - name: Lint the candidate invoice automation
+          ansible.builtin.command:
+            argv: [ansible-lint, roles/invoice_portal, playbooks/invoice-remediate.yml, extensions/molecule/invoice_portal]
+            chdir: "{{ invoice_validation_directory.path }}/source"
+          changed_when: false
+          environment: "{{ invoice_test_environment }}"
+
+        - name: Build the candidate collection
+          ansible.builtin.command:
+            argv: [ansible-galaxy, collection, build, --force, --output-path, "{{ invoice_validation_directory.path }}"]
+            chdir: "{{ invoice_validation_directory.path }}/source"
+          changed_when: false
+          environment: "{{ invoice_test_environment }}"
+
+        - name: Install the candidate into a separate collection root
+          ansible.builtin.command:
+            argv:
+              - ansible-galaxy
+              - collection
+              - install
+              - '{{ invoice_validation_directory.path }}/demo-webapp-0.1.0.tar.gz'
+              - --force
+              - --no-deps
+              - -p
+              - '{{ invoice_validation_directory.path }}/installed'
+          changed_when: false
+          environment: "{{ invoice_test_environment }}"
+
+        - name: Test the authored workflow on ephemeral RHEL EC2 instances
+          ansible.builtin.command:
+            argv: [molecule, test, -s, invoice_portal]
+            chdir: "{{ invoice_validation_directory.path }}/source"
+          changed_when: false
+          environment: "{{ invoice_test_environment }}"
+
+        - name: Read the trusted artifact selection
+          ansible.builtin.set_fact:
+            invoice_validation_material: "{{ lookup('ansible.builtin.file', lookup('ansible.builtin.env', 'INVOICE_MATERIAL_FILE')) | from_json }}"
+          no_log: true
+
+        - name: Publish independent validation evidence
+          ansible.builtin.set_stats:
+            data:
+              invoice_validation:
+                passed: true
+                source_revision: "{{ invoice_checkout.after }}"
+                wheel_sha256: "{{ invoice_validation_material.lightwell.sha256 }}"
+                backend: aws
+                scenario: invoice_portal
+                lifecycle: [create, prepare, converge, idempotence, verify, destroy]
+      rescue:
+        - name: Destroy disposable test resources after a failed validation
+          ansible.builtin.command:
+            argv: [molecule, destroy, -s, invoice_portal]
+            chdir: "{{ invoice_validation_directory.path }}/source"
+          environment: "{{ invoice_test_environment }}"
+          register: invoice_failed_cleanup
+          changed_when: false
+          failed_when: false
+
+        - name: Publish cleanup state without claiming a passing validation
+          ansible.builtin.set_stats:
+            data:
+              invoice_cleanup_required: "{{ invoice_failed_cleanup.rc != 0 }}"
+
+        - name: Keep failed validation unsuccessful
+          ansible.builtin.fail:
+            msg: >-
+              Independent invoice validation failed. Disposable resource cleanup
+              returned {{ invoice_failed_cleanup.rc }}. Inspect this job and the
+              deployment-tagged Molecule EC2 resources before another run.
+      always:
+        - name: Remove validation source and installed collection
+          ansible.builtin.file:
+            path: "{{ invoice_validation_directory.path }}"
+            state: absent
