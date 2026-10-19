@@ -54,13 +54,31 @@
           changed_when: false
           environment: "{{ invoice_test_environment }}"
 
-        - name: Install the candidate into a separate collection root
+        - name: Locate the built collection artifact
+          ansible.builtin.find:
+            paths: '{{ invoice_validation_directory.path }}'
+            patterns: demo-webapp-*.tar.gz
+            file_type: file
+            recurse: false
+          register: invoice_built_collection
+
+        - name: Require one built collection artifact
+          ansible.builtin.assert:
+            that: invoice_built_collection.matched == 1
+
+        - name: Record the built collection digest
+          ansible.builtin.stat:
+            path: '{{ invoice_built_collection.files[0].path }}'
+            checksum_algorithm: sha256
+          register: invoice_collection_digest
+
+        - name: Install the exact built candidate into a separate collection root
           ansible.builtin.command:
             argv:
               - ansible-galaxy
               - collection
               - install
-              - '{{ invoice_validation_directory.path }}/demo-webapp-0.1.0.tar.gz'
+              - '{{ invoice_built_collection.files[0].path }}'
               - --force
               - --no-deps
               - -p
@@ -87,6 +105,7 @@
                 passed: true
                 source_revision: "{{ invoice_checkout.after }}"
                 wheel_sha256: "{{ invoice_validation_material.lightwell.sha256 }}"
+                collection_sha256: '{{ invoice_collection_digest.stat.checksum }}'
                 backend: aws
                 scenario: invoice_portal
                 lifecycle: [create, prepare, converge, idempotence, verify, destroy]

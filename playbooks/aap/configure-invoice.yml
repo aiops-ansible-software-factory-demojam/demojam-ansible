@@ -49,8 +49,9 @@
 
     - name: Register the invoice test execution environment
       ansible.controller.execution_environment:
-        name: demo-invoice-test-ee
+        name: '{{ invoice_factory_ee_name }}'
         image: "{{ invoice_factory_ee }}"
+      register: invoice_registered_ee
 
     - name: Register a credential type restricted to disposable EC2 tests
       ansible.controller.credential_type:
@@ -135,7 +136,7 @@
         organization: demo
         project: demojam-ansible
         inventory: demo-inventory
-        execution_environment: demo-invoice-test-ee
+        execution_environment: '{{ invoice_factory_ee_name }}'
         playbook: playbooks/invoice/validate.yml
         credentials: [demo-invoice-tests, demo-invoice-artifacts]
         ask_variables_on_launch: true
@@ -175,7 +176,7 @@
         organization: demo
         project: invoice-collection
         inventory: demo-inventory
-        execution_environment: demo-invoice-test-ee
+        execution_environment: '{{ invoice_factory_ee_name }}'
         playbook: playbooks/invoice.yml
         credentials: [demo-webapp-ssh, demo-invoice-artifacts]
         become_enabled: true
@@ -211,6 +212,7 @@
               - invoice_validation_record.json.artifacts.invoice_validation.passed | bool
               - invoice_validation_record.json.artifacts.invoice_validation.source_revision == invoice_candidate_sha
               - invoice_validation_record.json.artifacts.invoice_validation.wheel_sha256 == (invoice_factory_material | from_json).lightwell.sha256
+              - invoice_validation_record.json.execution_environment == invoice_registered_ee.id
 
         - name: Create an immutable production source project
           ansible.controller.project:
@@ -224,15 +226,28 @@
             scm_update_on_launch: false
             wait: true
 
+        - name: Snapshot the validated artifact selection for this release
+          ansible.controller.credential:
+            name: >-
+              invoice-release-{{ invoice_candidate_sha }}-{{ (invoice_factory_material | from_json).lightwell.sha256 }}
+            organization: demo
+            credential_type: Demo Invoice Artifacts
+            inputs:
+              material: '{{ invoice_factory_material }}'
+              signing_key: '{{ invoice_factory_public_key }}'
+          no_log: true
+
         - name: Register deployment of only the reviewed commit
           ansible.controller.job_template:
-            name: 'invoice-deploy-{{ invoice_candidate_sha[:12] }}'
+            name: 'invoice-deploy-{{ invoice_candidate_sha }}-{{ (invoice_factory_material | from_json).lightwell.sha256 }}'
             organization: demo
             project: 'invoice-reviewed-{{ invoice_candidate_sha[:12] }}'
             inventory: demo-inventory
-            execution_environment: demo-invoice-test-ee
+            execution_environment: '{{ invoice_factory_ee_name }}'
             playbook: playbooks/invoice-remediate.yml
-            credentials: [demo-webapp-ssh, demo-invoice-artifacts]
+            credentials:
+              - demo-webapp-ssh
+              - 'invoice-release-{{ invoice_candidate_sha }}-{{ (invoice_factory_material | from_json).lightwell.sha256 }}'
             become_enabled: true
             ask_scm_branch_on_launch: false
             ask_variables_on_launch: false
@@ -241,10 +256,11 @@
               invoice_candidate_sha: '{{ invoice_candidate_sha }}'
               invoice_release_channel: lightwell
               invoice_target_group: webapps
+              invoice_approved_wheel_sha256: '{{ (invoice_factory_material | from_json).lightwell.sha256 }}'
 
         - name: Register the production approval workflow
           ansible.controller.workflow_job_template:
-            name: 'invoice-promote-{{ invoice_candidate_sha[:12] }}'
+            name: 'invoice-promote-{{ invoice_candidate_sha }}-{{ (invoice_factory_material | from_json).lightwell.sha256 }}'
             organization: demo
             inventory: demo-inventory
             ask_variables_on_launch: false
@@ -253,14 +269,14 @@
         - name: Create the deployment workflow node
           ansible.controller.workflow_job_template_node:
             identifier: deploy
-            workflow_job_template: 'invoice-promote-{{ invoice_candidate_sha[:12] }}'
+            workflow_job_template: 'invoice-promote-{{ invoice_candidate_sha }}-{{ (invoice_factory_material | from_json).lightwell.sha256 }}'
             organization: demo
-            unified_job_template: 'invoice-deploy-{{ invoice_candidate_sha[:12] }}'
+            unified_job_template: 'invoice-deploy-{{ invoice_candidate_sha }}-{{ (invoice_factory_material | from_json).lightwell.sha256 }}'
 
         - name: Gate deployment on explicit human approval
           ansible.controller.workflow_job_template_node:
             identifier: production-approval
-            workflow_job_template: 'invoice-promote-{{ invoice_candidate_sha[:12] }}'
+            workflow_job_template: 'invoice-promote-{{ invoice_candidate_sha }}-{{ (invoice_factory_material | from_json).lightwell.sha256 }}'
             organization: demo
             approval_node:
               name: Approve invoice production remediation
