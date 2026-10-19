@@ -40,6 +40,14 @@
           ansible.builtin.assert:
             that: invoice_checkout.after == invoice_candidate_sha
 
+        - name: Check the isolated source before validation
+          ansible.builtin.command:
+            argv: [git, status, --porcelain, --untracked-files=normal]
+            chdir: '{{ invoice_validation_directory.path }}/source'
+          register: invoice_source_before
+          changed_when: false
+          failed_when: invoice_source_before.stdout | trim | length > 0
+
         - name: Lint the candidate invoice automation
           ansible.builtin.command:
             argv: [ansible-lint, roles/invoice_portal, playbooks/invoice-remediate.yml, extensions/molecule/invoice_portal]
@@ -97,6 +105,22 @@
           ansible.builtin.set_fact:
             invoice_validation_material: "{{ lookup('ansible.builtin.file', lookup('ansible.builtin.env', 'INVOICE_MATERIAL_FILE')) | from_json }}"
           no_log: true
+
+        - name: Require the source to remain clean after the machine tests
+          ansible.builtin.command:
+            argv: [git, status, --porcelain, --untracked-files=normal]
+            chdir: '{{ invoice_validation_directory.path }}/source'
+          register: invoice_source_after
+          changed_when: false
+          failed_when: invoice_source_after.stdout | trim | length > 0
+
+        - name: Require the published commit to remain checked out
+          ansible.builtin.command:
+            argv: [git, rev-parse, HEAD]
+            chdir: '{{ invoice_validation_directory.path }}/source'
+          register: invoice_head_after
+          changed_when: false
+          failed_when: invoice_head_after.stdout | trim != invoice_candidate_sha
 
         - name: Publish independent validation evidence
           ansible.builtin.set_stats:
