@@ -15,8 +15,10 @@
     - name: Require runtime inputs
       ansible.builtin.assert:
         that:
+          - invoice_factory_material is mapping
           - invoice_factory_material | length > 0
           - invoice_factory_ee | length > 0
+          - invoice_factory_test_aws is mapping
           - invoice_factory_test_aws | length > 0
       no_log: true
 
@@ -37,13 +39,15 @@
             INVOICE_MATERIAL_FILE: !unsafe '{{ tower.filename.material }}'
             INVOICE_SIGNING_KEY_FILE: !unsafe '{{ tower.filename.signing_key }}'
 
+    # Ansible 2.16 interprets bare JSON-looking templates as native mappings.
+    # Serialize at the credential boundary, where material must remain a string.
     - name: Register the artifact read credential
       ansible.controller.credential:
         name: demo-invoice-artifacts
         organization: demo
         credential_type: Demo Invoice Artifacts
         inputs:
-          material: "{{ invoice_factory_material }}"
+          material: "{{ invoice_factory_material | to_json }}"
           signing_key: "{{ invoice_factory_public_key }}"
       no_log: true
 
@@ -114,20 +118,20 @@
         organization: demo
         credential_type: Demo Invoice Test AWS
         inputs:
-          access_key_id: "{{ (invoice_factory_test_aws | from_json).access_key_id }}"
-          secret_access_key: "{{ (invoice_factory_test_aws | from_json).secret_access_key }}"
-          region: "{{ (invoice_factory_test_aws | from_json).config.region }}"
-          account_id: "{{ (invoice_factory_test_aws | from_json).config.account_id }}"
-          deployment_id: "{{ (invoice_factory_test_aws | from_json).config.deployment_id }}"
-          vpc_id: "{{ (invoice_factory_test_aws | from_json).config.vpc_id }}"
-          subnet_id: "{{ (invoice_factory_test_aws | from_json).config.subnet_id }}"
-          security_group_id: "{{ (invoice_factory_test_aws | from_json).config.molecule_security_group_id }}"
-          instance_type: "{{ (invoice_factory_test_aws | from_json).config.molecule_instance_type }}"
-          rhel9_ami_id: "{{ (invoice_factory_test_aws | from_json).config.rhel9_ami_id }}"
-          rhel10_ami_id: "{{ (invoice_factory_test_aws | from_json).config.rhel10_ami_id }}"
-          root_volume_size: "{{ (invoice_factory_test_aws | from_json).config.root_volume_size | string }}"
-          ssh_cidr: "{{ (invoice_factory_test_aws | from_json).config.ssh_cidr }}"
-          http_cidr: "{{ (invoice_factory_test_aws | from_json).config.http_cidr }}"
+          access_key_id: "{{ invoice_factory_test_aws.access_key_id | string }}"
+          secret_access_key: "{{ invoice_factory_test_aws.secret_access_key | string }}"
+          region: "{{ invoice_factory_test_aws.config.region | string }}"
+          account_id: "{{ invoice_factory_test_aws.config.account_id | string }}"
+          deployment_id: "{{ invoice_factory_test_aws.config.deployment_id | string }}"
+          vpc_id: "{{ invoice_factory_test_aws.config.vpc_id | string }}"
+          subnet_id: "{{ invoice_factory_test_aws.config.subnet_id | string }}"
+          security_group_id: "{{ invoice_factory_test_aws.config.molecule_security_group_id | string }}"
+          instance_type: "{{ invoice_factory_test_aws.config.molecule_instance_type | string }}"
+          rhel9_ami_id: "{{ invoice_factory_test_aws.config.rhel9_ami_id | string }}"
+          rhel10_ami_id: "{{ invoice_factory_test_aws.config.rhel10_ami_id | string }}"
+          root_volume_size: "{{ invoice_factory_test_aws.config.root_volume_size | string }}"
+          ssh_cidr: "{{ invoice_factory_test_aws.config.ssh_cidr | string }}"
+          http_cidr: "{{ invoice_factory_test_aws.config.http_cidr | string }}"
       no_log: true
 
     - name: Register independent validation of published candidate commits
@@ -211,7 +215,7 @@
               - invoice_validation_record.json.summary_fields.job_template.name == 'invoice_validate'
               - invoice_validation_record.json.artifacts.invoice_validation.passed | bool
               - invoice_validation_record.json.artifacts.invoice_validation.source_revision == invoice_candidate_sha
-              - invoice_validation_record.json.artifacts.invoice_validation.wheel_sha256 == (invoice_factory_material | from_json).lightwell.sha256
+              - invoice_validation_record.json.artifacts.invoice_validation.wheel_sha256 == invoice_factory_material.lightwell.sha256
               - invoice_validation_record.json.execution_environment == invoice_registered_ee.id
 
         - name: Create an immutable production source project
@@ -229,17 +233,17 @@
         - name: Snapshot the validated artifact selection for this release
           ansible.controller.credential:
             name: >-
-              invoice-release-{{ invoice_candidate_sha }}-{{ (invoice_factory_material | from_json).lightwell.sha256 }}
+              invoice-release-{{ invoice_candidate_sha }}-{{ invoice_factory_material.lightwell.sha256 }}
             organization: demo
             credential_type: Demo Invoice Artifacts
             inputs:
-              material: '{{ invoice_factory_material }}'
+              material: '{{ invoice_factory_material | to_json }}'
               signing_key: '{{ invoice_factory_public_key }}'
           no_log: true
 
         - name: Register deployment of only the reviewed commit
           ansible.controller.job_template:
-            name: 'invoice-deploy-{{ invoice_candidate_sha }}-{{ (invoice_factory_material | from_json).lightwell.sha256 }}'
+            name: 'invoice-deploy-{{ invoice_candidate_sha }}-{{ invoice_factory_material.lightwell.sha256 }}'
             organization: demo
             project: 'invoice-reviewed-{{ invoice_candidate_sha[:12] }}'
             inventory: demo-inventory
@@ -247,7 +251,7 @@
             playbook: playbooks/invoice-remediate.yml
             credentials:
               - demo-webapp-ssh
-              - 'invoice-release-{{ invoice_candidate_sha }}-{{ (invoice_factory_material | from_json).lightwell.sha256 }}'
+              - 'invoice-release-{{ invoice_candidate_sha }}-{{ invoice_factory_material.lightwell.sha256 }}'
             become_enabled: true
             ask_scm_branch_on_launch: false
             ask_variables_on_launch: false
@@ -256,11 +260,11 @@
               invoice_candidate_sha: '{{ invoice_candidate_sha }}'
               invoice_release_channel: lightwell
               invoice_target_group: webapps
-              invoice_approved_wheel_sha256: '{{ (invoice_factory_material | from_json).lightwell.sha256 }}'
+              invoice_approved_wheel_sha256: '{{ invoice_factory_material.lightwell.sha256 }}'
 
         - name: Register the production approval workflow
           ansible.controller.workflow_job_template:
-            name: 'invoice-promote-{{ invoice_candidate_sha }}-{{ (invoice_factory_material | from_json).lightwell.sha256 }}'
+            name: 'invoice-promote-{{ invoice_candidate_sha }}-{{ invoice_factory_material.lightwell.sha256 }}'
             organization: demo
             inventory: demo-inventory
             ask_variables_on_launch: false
@@ -269,14 +273,14 @@
         - name: Create the deployment workflow node
           ansible.controller.workflow_job_template_node:
             identifier: deploy
-            workflow_job_template: 'invoice-promote-{{ invoice_candidate_sha }}-{{ (invoice_factory_material | from_json).lightwell.sha256 }}'
+            workflow_job_template: 'invoice-promote-{{ invoice_candidate_sha }}-{{ invoice_factory_material.lightwell.sha256 }}'
             organization: demo
-            unified_job_template: 'invoice-deploy-{{ invoice_candidate_sha }}-{{ (invoice_factory_material | from_json).lightwell.sha256 }}'
+            unified_job_template: 'invoice-deploy-{{ invoice_candidate_sha }}-{{ invoice_factory_material.lightwell.sha256 }}'
 
         - name: Gate deployment on explicit human approval
           ansible.controller.workflow_job_template_node:
             identifier: production-approval
-            workflow_job_template: 'invoice-promote-{{ invoice_candidate_sha }}-{{ (invoice_factory_material | from_json).lightwell.sha256 }}'
+            workflow_job_template: 'invoice-promote-{{ invoice_candidate_sha }}-{{ invoice_factory_material.lightwell.sha256 }}'
             organization: demo
             approval_node:
               name: Approve invoice production remediation

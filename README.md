@@ -276,3 +276,8 @@ production workflows bound to a successfully tested collection SHA.
 The Forgejo EDA rule dispatches only newly opened invoice incidents to the
 invoice AO authoring workflow. See the GitOps repository's detailed
 [invoice walkthrough](https://github.com/aiops-ansible-software-factory-demojam/openshift-gitops/blob/feature/lightwell-invoice-demo/docs/invoice-lightwell-demo.md).
+
+In the supported Red Hat execution environment, run
+`python3 -m unittest discover -s tests -p test_invoice_configuration.py -v`
+to check the invoice credential serialization with dummy inputs. These checks
+exercise Ansible's native templating and do not connect to AWS or AAP.
