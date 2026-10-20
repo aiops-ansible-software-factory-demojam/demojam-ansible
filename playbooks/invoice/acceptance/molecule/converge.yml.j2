@@ -1,0 +1,6 @@
+---
+- name: Deploy the exact candidate using its reviewed release lock
+  ansible.builtin.import_playbook: '{{ invoice_validation_directory.path }}/source/playbooks/invoice-remediate.yml'
+  vars:
+    invoice_target_group: molecule
+    invoice_candidate_sha: '{{ invoice_candidate_sha }}'

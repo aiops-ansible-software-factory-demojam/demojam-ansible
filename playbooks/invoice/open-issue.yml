@@ -1,84 +1,133 @@
 ---
-- name: Open a deduplicated invoice remediation ticket
+- name: Reconcile a finding into a deduplicated application remediation ticket
   hosts: localhost
   connection: local
   gather_facts: false
   vars:
-    invoice_issue_url: http://forgejo.forgejo.svc.cluster.local:3000/api/v1/repos/demo-owner/ansible-collection-demo.webapp/issues
-    invoice_issue_marker: '<!-- demojam-invoice-cve-2023-36464 -->'
+    invoice_issue_url: 'http://forgejo.forgejo.svc.cluster.local:3000/api/v1/repos/{{ invoice_findings.application_profile.repository }}/issues'
+    invoice_issue_marker: '<!-- remediation:{{ invoice_findings.incident_key }} -->'
   tasks:
-    - name: Require collected vulnerability evidence
+    - name: Require a structured finding from trusted assessment
       ansible.builtin.assert:
         that:
-          - invoice_findings.affected | bool
-          - invoice_findings.cve == 'CVE-2023-36464'
-          - invoice_findings.regression.status == 'timed_out'
-          - invoice_findings.normal.status == 'completed'
+          - invoice_findings.schema_version == 1
+          - invoice_findings.incident_key is match('^[0-9a-f]{64}$')
+          - invoice_findings.application_profile.repository is match('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')
+          - invoice_findings.advisory_evidence | length > 0
 
-    - name: Read open collection issues
-      ansible.builtin.uri:
-        url: "{{ invoice_issue_url }}?state=open&limit=50&page=1"
-        headers:
-          Authorization: "token {{ lookup('ansible.builtin.env', 'FORGEJO_API_TOKEN') }}"
-        return_content: true
-      register: invoice_open_issues
-      no_log: true
-
-    - name: Match the incident identity
+    - name: Initialize paginated issue reconciliation
       ansible.builtin.set_fact:
-        invoice_existing_issues: "{{ invoice_open_issues.json | selectattr('body', 'search', invoice_issue_marker) | list }}"
+        remediation_issues: []
+        remediation_more_pages: true
+
+    - name: Read issue history without silently truncating it
+      ansible.builtin.include_tasks: tasks/issue-page.yml
+      loop: '{{ range(1, 101) | list }}'
+      loop_control:
+        loop_var: remediation_page
+
+    - name: Refuse a truncated issue history
+      ansible.builtin.assert:
+        that: not remediation_more_pages | bool
+        fail_msg: Repository issue history exceeds the configured 5000-item reconciliation bound.
+
+    - name: Match this application environment package and advisory identity
+      ansible.builtin.set_fact:
+        remediation_matches: "{{ remediation_issues | selectattr('body', 'search', invoice_issue_marker) | list }}"
       no_log: true
 
-    - name: Refuse an ambiguous incident or truncated issue search
-      ansible.builtin.assert:
-        that:
-          - invoice_existing_issues | length <= 1
-          - invoice_open_issues.json | length < 50
-        fail_msg: Inspect existing issues before creating another incident.
+    - name: Find an existing open incident
+      ansible.builtin.set_fact:
+        remediation_open_matches: "{{ remediation_matches | selectattr('state', 'equalto', 'open') | list }}"
 
-    - name: Create the automation authoring ticket
-      when: invoice_existing_issues | length == 0
+    - name: Refuse ambiguous open incidents
+      ansible.builtin.assert:
+        that: remediation_open_matches | length <= 1
+
+    - name: Create a repeatable release authoring ticket when a supported fix exists
+      when:
+        - invoice_findings.affected | bool
+        - invoice_findings.fix_available | bool
+        - remediation_open_matches | length == 0
       ansible.builtin.uri:
-        url: "{{ invoice_issue_url }}"
+        url: '{{ invoice_issue_url }}'
         method: POST
         headers:
           Authorization: "token {{ lookup('ansible.builtin.env', 'FORGEJO_API_TOKEN') }}"
         body_format: json
         body:
-          title: 'Implement tested Lightwell remediation for invoice processing'
+          title: 'Remediate {{ invoice_findings.package }} in {{ invoice_findings.application }}'
           body: |
             {{ invoice_issue_marker }}
-            Root Cause: CVE-2023-36464 affects the observed PyPDF2 invoice extraction worker.
-            Normal invoices complete; the identical content stream with an EOF-terminated
-            comment exceeds the unchanged two-second extraction deadline.
+            Application: {{ invoice_findings.application }} ({{ invoice_findings.environment }})
+            Observed dependency: {{ invoice_findings.package }} {{ invoice_findings.installed_version }}
+            Advisories: {{ invoice_findings.advisories | join(', ') }}
 
-            Observed evidence:
+            Update {{ invoice_findings.application_profile.release_manifest }} to lock
+            the approved Lightwell package/version/digest below. Reuse the existing
+            deployment golden path; change automation only when required by this finding.
+            Add meaningful application regression coverage where available. Preserve
+            business behavior, artifact trust, rollout failure handling and host policy.
+            A signature is not advisory evidence. Do not infer CVE attribution from
+            a timeout, invent a fix, modify mandatory acceptance checks or change production.
+
+            Evidence and proposed artifact (no repository credentials):
             {{ invoice_findings | to_nice_json }}
 
-            Implement playbooks/invoice-remediate.yml in this collection. The shipped
-            playbook deliberately fails until this capability is authored. Reuse
-            demo.webapp.invoice_portal as the artifact and service deployment primitive.
-            Load the trusted INVOICE_MATERIAL_FILE and INVOICE_SIGNING_KEY_FILE inputs.
-            Require the requested source SHA to match the real checkout; choose only
-            the Lightwell artifact. Use serial canary batches and stop after failure.
-            Preserve SELinux enforcing, the two-second processing deadline, document
-            fixtures, signing-key trust, and exact artifact checks. Do not patch PyPDF2
-            yourself, migrate to pypdf, replace the PDF, or change parser timeout behavior.
-            Add tests for functional processing, CVE remediation, idempotence, and recovery
-            from a failed candidate. Prove the previous healthy release is restored and
-            the failed deployment is still reported as failed.
+            Compatible catalog candidates (availability is not approval):
+            {{ remediation_candidates | default([]) | to_nice_json }}
 
-            Run ansible-lint, build the collection and run the invoice_portal Molecule
-            scenario with PROVISIONER=aws against both RHEL 9 and RHEL 10. Record actual
-            results and the committed SHA. Submit a PR; a human controls merge and AAP
-            production approval. You have no production deployment authorization.
+            Test scenario: {{ invoice_findings.validation.scenario }}.
+            Run the full RHEL 9/10 EC2 lifecycle and report the actual committed SHA.
+            Human review, independent AAP acceptance, and production approval are required.
+            Prior incident count for this identity: {{ remediation_matches | length }}.
         status_code: 201
         return_content: true
       register: invoice_created_issue
       no_log: true
 
-    - name: Publish the incident reference
+    - name: Refresh evidence on an existing open incident
+      when:
+        - invoice_findings.affected | bool
+        - remediation_open_matches | length == 1
+      ansible.builtin.uri:
+        url: '{{ invoice_issue_url }}/{{ remediation_open_matches[0].number }}'
+        method: PATCH
+        headers:
+          Authorization: "token {{ lookup('ansible.builtin.env', 'FORGEJO_API_TOKEN') }}"
+        body_format: json
+        body:
+          body: |
+            {{ invoice_issue_marker }}
+            Update {{ invoice_findings.application_profile.release_manifest }} using
+            the approved selection below. Preserve artifact trust, mandatory acceptance,
+            business behavior, rollout recovery and human merge/production gates.
+            {{ invoice_findings | to_nice_json }}
+        status_code: [200, 201]
+      no_log: true
+
+    - name: Close an open incident only after observing a configured fixed version
+      when:
+        - not invoice_findings.affected | bool
+        - invoice_findings.assessment_state == 'fixed'
+        - invoice_findings.installed_version in (invoice_findings.advisory_evidence | map(attribute='fixed_versions') | flatten)
+        - invoice_findings.observations | default([invoice_findings]) | rejectattr('assessment_state', 'equalto', 'fixed') | list | length == 0
+        - remediation_open_matches | length == 1
+      ansible.builtin.uri:
+        url: '{{ invoice_issue_url }}/{{ remediation_open_matches[0].number }}'
+        method: PATCH
+        headers:
+          Authorization: "token {{ lookup('ansible.builtin.env', 'FORGEJO_API_TOKEN') }}"
+        body_format: json
+        body:
+          state: closed
+        status_code: [200, 201]
+      no_log: true
+
+    - name: Publish ticket reconciliation outcome
       ansible.builtin.set_stats:
         data:
-          invoice_issue_number: "{{ invoice_created_issue.json.number if invoice_existing_issues | length == 0 else invoice_existing_issues[0].number }}"
-          invoice_issue_url: "{{ invoice_created_issue.json.html_url if invoice_existing_issues | length == 0 else invoice_existing_issues[0].html_url }}"
+          remediation_incident_key: '{{ invoice_findings.incident_key }}'
+          remediation_fix_available: '{{ invoice_findings.fix_available }}'
+          invoice_issue_number: '{{ invoice_created_issue.json.number | default((remediation_open_matches | first | default({})).number | default(0)) }}'
+          invoice_issue_url: '{{ invoice_created_issue.json.html_url | default((remediation_open_matches | first | default({})).html_url | default("")) }}'

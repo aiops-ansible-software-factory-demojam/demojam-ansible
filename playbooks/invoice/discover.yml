@@ -1,0 +1,17 @@
+---
+- name: Discover compatible Lightwell candidates without selecting latest
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Query the authenticated catalog for the configured application package
+      demo.webapp.lightwell_plan:
+        operation: discover
+        material_file: "{{ lookup('ansible.builtin.env', 'INVOICE_MATERIAL_FILE') }}"
+      register: remediation_catalog
+
+    - name: Publish candidate identities without repository credentials
+      ansible.builtin.set_stats:
+        data:
+          remediation_candidates: '{{ remediation_catalog.candidates }}'
+          remediation_selection_required: true

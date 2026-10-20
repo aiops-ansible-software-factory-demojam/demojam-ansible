@@ -281,3 +281,18 @@ In the supported Red Hat execution environment, run
 `python3 -m unittest discover -s tests -p test_invoice_configuration.py -v`
 to check the invoice credential serialization with dummy inputs. These checks
 exercise Ansible's native templating and do not connect to AWS or AAP.
+
+The invoice-named job entry points are compatibility names for the initial demo.
+Findings and incident keys are profile-driven; package/advisory identities are
+not hardcoded in the detection or ticket code. `invoice_discover` returns compatible
+Lightwell catalog candidates without automatically selecting a version. Explicit
+advisory/version mappings and operator artifact approval remain required.
+
+The mandatory suite under `playbooks/invoice/acceptance` is maintained separately
+from the candidate collection. Validation runs a second, independently provisioned
+RHEL 9/10 lifecycle, including business checks, actual installed wheel identity,
+independent regression documents, SELinux, and an activation-failure canary test.
+The candidate source remains clean. Failed cleanup preserves ownership metadata
+for recovery; never mark a failed validation successful after rollback.
+Promotion binds the tested source, wheel, execution image and application-profile
+digest. Add reviewed acceptance adapters for applications beyond the invoice app.

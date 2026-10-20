@@ -164,15 +164,18 @@
         organization: demo
         project: demojam-ansible
         inventory: demo-inventory
-        execution_environment: demo-aap-ee
+        execution_environment: '{{ invoice_factory_ee_name }}'
         playbook: "{{ item.playbook }}"
         credentials: "{{ item.credentials }}"
         become_enabled: "{{ item.become | default(false) }}"
+        extra_vars: '{{ item.extra_vars | default({}) }}'
         ask_variables_on_launch: true
         allow_simultaneous: false
       loop:
-        - {name: invoice_check, playbook: playbooks/invoice/check.yml, credentials: [demo-webapp-ssh], become: true}
+        - {name: invoice_check, playbook: playbooks/invoice/check.yml, credentials: [demo-webapp-ssh, demo-invoice-artifacts], become: true,
+           extra_vars: {remediation_target_group: '{{ invoice_factory_material.profile.application.inventory_group }}'}}
         - {name: invoice_open_issue, playbook: playbooks/invoice/open-issue.yml, credentials: [demo-forgejo-issues]}
+        - {name: invoice_discover, playbook: playbooks/invoice/discover.yml, credentials: [demo-invoice-artifacts]}
 
     - name: Register baseline deployment with an exact source override
       ansible.controller.job_template:
@@ -184,6 +187,8 @@
         playbook: playbooks/invoice.yml
         credentials: [demo-webapp-ssh, demo-invoice-artifacts]
         become_enabled: true
+        extra_vars:
+          invoice_target_group: '{{ invoice_factory_material.profile.application.inventory_group }}'
         ask_scm_branch_on_launch: true
         ask_variables_on_launch: true
         allow_simultaneous: false
@@ -215,6 +220,10 @@
               - invoice_validation_record.json.summary_fields.job_template.name == 'invoice_validate'
               - invoice_validation_record.json.artifacts.invoice_validation.passed | bool
               - invoice_validation_record.json.artifacts.invoice_validation.source_revision == invoice_candidate_sha
+              - invoice_validation_record.json.artifacts.invoice_validation.acceptance_suite == 'trusted-invoice-v1'
+              - >-
+                invoice_validation_record.json.artifacts.invoice_validation.profile_sha256 ==
+                (invoice_factory_material.profile | to_json(sort_keys=true) | hash('sha256'))
               - invoice_validation_record.json.artifacts.invoice_validation.wheel_sha256 == invoice_factory_material.lightwell.sha256
               - invoice_validation_record.json.execution_environment == invoice_registered_ee.id
 
@@ -259,7 +268,7 @@
             extra_vars:
               invoice_candidate_sha: '{{ invoice_candidate_sha }}'
               invoice_release_channel: lightwell
-              invoice_target_group: webapps
+              invoice_target_group: '{{ invoice_factory_material.profile.application.inventory_group }}'
               invoice_approved_wheel_sha256: '{{ invoice_factory_material.lightwell.sha256 }}'
 
         - name: Register the production approval workflow
