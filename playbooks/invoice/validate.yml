@@ -62,12 +62,25 @@
           changed_when: false
           failed_when: invoice_source_before.stdout | trim | length > 0
 
+        - name: Write an isolated inventory for syntax checks
+          ansible.builtin.copy:
+            dest: '{{ invoice_validation_directory.path }}/lint-inventory.yml'
+            mode: '0600'
+            content: |
+              ---
+              all:
+                hosts:
+                  localhost:
+                    ansible_connection: local
+
         - name: Lint the candidate invoice automation
           ansible.builtin.command:
             argv: [ansible-lint, roles/python_application, roles/invoice_portal, playbooks/invoice-remediate.yml, extensions/molecule/invoice_portal]
             chdir: "{{ invoice_validation_directory.path }}/source"
           changed_when: false
-          environment: "{{ invoice_test_environment }}"
+          # Controller requires a parsed inventory; syntax checks do not use
+          # the production inventory or Molecule's not-yet-created guests.
+          environment: "{{ invoice_test_environment | combine({'ANSIBLE_INVENTORY': invoice_validation_directory.path ~ '/lint-inventory.yml'}) }}"
 
         - name: Build the candidate collection
           ansible.builtin.command:

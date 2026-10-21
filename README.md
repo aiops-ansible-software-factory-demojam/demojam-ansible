@@ -282,6 +282,12 @@ In the supported Red Hat execution environment, run
 to check the invoice credential serialization with dummy inputs. These checks
 exercise Ansible's native templating and do not connect to AWS or AAP.
 
+The validator supplies a temporary localhost inventory only to `ansible-lint`'s
+syntax checks. This preserves Controller's strict inventory parsing policy and
+keeps lint separate from production and Molecule inventories. In the development
+tools image, run `python3 tests/test_invoice_validation_inventory.py` to reproduce
+the missing-inventory failure and check that the isolated inventory fixes it.
+
 The invoice-named job entry points are compatibility names for the initial demo.
 Findings and incident keys are profile-driven; package/advisory identities are
 not hardcoded in the detection or ticket code. `invoice_discover` returns compatible
