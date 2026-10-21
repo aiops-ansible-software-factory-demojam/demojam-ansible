@@ -1,0 +1,16 @@
+---
+plugin: amazon.aws.aws_ec2
+regions:
+  - "{{ lookup('ansible.builtin.env', 'AWS_REGION') }}"
+filters:
+  "tag:demojam:deployment": "{{ (lookup('ansible.builtin.env', 'DEMO_AWS_CONFIG') | from_json).deployment_id }}"
+  "tag:demojam:purpose": pythonapp
+  instance-state-name: running
+hostnames:
+  - tag:Name
+compose:
+  ansible_host: public_ip_address
+  ansible_user: "'ec2-user'"
+groups:
+  pythonapps: "true"
+strict: true

@@ -172,7 +172,7 @@
         ask_variables_on_launch: true
         allow_simultaneous: false
       loop:
-        - {name: invoice_check, playbook: playbooks/invoice/check.yml, credentials: [demo-webapp-ssh, demo-invoice-artifacts], become: true,
+        - {name: invoice_check, playbook: playbooks/invoice/check.yml, credentials: [demo-pythonapp-ssh, demo-invoice-artifacts], become: true,
            extra_vars: {remediation_target_group: '{{ invoice_factory_material.profile.application.inventory_group }}'}}
         - {name: invoice_open_issue, playbook: playbooks/invoice/open-issue.yml, credentials: [demo-forgejo-issues]}
         - {name: invoice_discover, playbook: playbooks/invoice/discover.yml, credentials: [demo-invoice-artifacts]}
@@ -185,7 +185,7 @@
         inventory: demo-inventory
         execution_environment: '{{ invoice_factory_ee_name }}'
         playbook: playbooks/invoice.yml
-        credentials: [demo-webapp-ssh, demo-invoice-artifacts]
+        credentials: [demo-pythonapp-ssh, demo-invoice-artifacts]
         become_enabled: true
         extra_vars:
           invoice_target_group: '{{ invoice_factory_material.profile.application.inventory_group }}'
@@ -259,7 +259,7 @@
             execution_environment: '{{ invoice_factory_ee_name }}'
             playbook: playbooks/invoice-remediate.yml
             credentials:
-              - demo-webapp-ssh
+              - demo-pythonapp-ssh
               - 'invoice-release-{{ invoice_candidate_sha }}-{{ invoice_factory_material.lightwell.sha256 }}'
             become_enabled: true
             ask_scm_branch_on_launch: false

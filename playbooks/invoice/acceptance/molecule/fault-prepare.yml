@@ -14,7 +14,7 @@
     invoice_portal_signing_key: "{{ lookup('ansible.builtin.env', 'INVOICE_SIGNING_KEY_FILE') }}"
     invoice_portal_signing_key_sha256: '{{ invoice_material.signing_key_sha256 }}'
   roles:
-    - demo.webapp.invoice_portal
+    - demo.pythonapp.invoice_portal
   tasks:
     - name: Create a canary-only systemd override directory
       when: inventory_hostname == groups['molecule'][0]

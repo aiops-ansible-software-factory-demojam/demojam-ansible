@@ -1,7 +1,7 @@
 ---
 controller_templates: >-
   {{ demo_controller_templates | rejectattr('name', 'equalto', 'openshift_virtualization_machine') | list
-     if demo_backend == 'aws' else demo_controller_templates }}
+     if demo_backend == 'aws' else demo_controller_templates | rejectattr('name', 'equalto', 'pythonapp_vm') | list }}
 demo_controller_templates:
   - name: webapp_mcp
     description: Install or disable read-only MCP diagnostics on the webapp guest
@@ -122,5 +122,29 @@ demo_controller_templates:
       - demo-webapp-ssh
     extra_vars:
       demo_backend: "{{ demo_backend }}"
+    become_enabled: true
+    ask_variables_on_launch: false
+  - name: pythonapp_vm
+    description: Provision or remove the separate RHEL 9 Python application in pythonapp-vms
+    organization: demo
+    project: demojam-ansible
+    inventory: demo-inventory
+    execution_environment: demo-aap-ee
+    job_type: run
+    playbook: playbooks/aws/pythonapp-launch.yml
+    credentials: [demo-virtualmachine-admin, demo-aws-guest]
+    ask_variables_on_launch: true
+    extra_vars:
+      host: demo_cluster
+      vm_state: present
+  - name: webapp_retire_legacy_invoice
+    description: Stop a legacy invoice unit on the nginx host after separate Python deployment
+    organization: demo
+    project: demojam-ansible
+    inventory: demo-inventory
+    execution_environment: demo-aap-ee
+    job_type: run
+    playbook: playbooks/webapp/retire-legacy-invoice.yml
+    credentials: [demo-webapp-ssh]
     become_enabled: true
     ask_variables_on_launch: false

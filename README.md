@@ -296,3 +296,11 @@ The candidate source remains clean. Failed cleanup preserves ownership metadata
 for recovery; never mark a failed validation successful after rollback.
 Promotion binds the tested source, wheel, execution image and application-profile
 digest. Add reviewed acceptance adapters for applications beyond the invoice app.
+
+## Independent application hosts
+
+On AWS, `webapp_vm` and `pythonapp_vm` use the shared `playbooks/aws/application-launch.yml` lifecycle through fixed application wrappers. They discover distinct deployment/purpose tags and publish endpoints into `webapp-vms` and `pythonapp-vms`. Dynamic inventory sources populate separate `webapps` and `pythonapps` groups. SELinux fault/nginx jobs target only `webapps`; invoice observation/deployment target only `pythonapps` with the `demo.pythonapp` collection.
+
+The Forgejo listener dispatches new Python security incidents from `demo-owner/ansible-collection-demo.pythonapp` using their structured remediation marker. The nginx RCA rule continues to target `demo-owner/ansible-collection-demo.webapp` and requires its outage marker and RCA. Application hosts share a bootstrap-managed SSH identity but have separate AAP credential names and EC2 key names; disposable test credentials remain separate from production provisioning.
+
+An upgrade job, `webapp_retire_legacy_invoice`, stops/disables only a former invoice unit found on the nginx host after bootstrap has installed the independent Python baseline. It preserves release files and does not target the new Python host.

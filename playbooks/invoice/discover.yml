@@ -5,7 +5,7 @@
   gather_facts: false
   tasks:
     - name: Query the authenticated catalog for the configured application package
-      demo.webapp.lightwell_plan:
+      demo.pythonapp.lightwell_plan:
         operation: discover
         material_file: "{{ lookup('ansible.builtin.env', 'INVOICE_MATERIAL_FILE') }}"
       register: remediation_catalog

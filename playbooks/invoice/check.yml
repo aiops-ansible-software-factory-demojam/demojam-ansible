@@ -1,6 +1,6 @@
 ---
 - name: Collect application observations separately from advisory assessment
-  hosts: "{{ remediation_target_group | default('webapps') }}"
+  hosts: "{{ remediation_target_group | default('pythonapps') }}"
   become: true
   gather_facts: false
   strategy: linear
@@ -28,7 +28,7 @@
       changed_when: false
 
     - name: Assess the installed dependency using trusted advisory mappings
-      demo.webapp.lightwell_plan:
+      demo.pythonapp.lightwell_plan:
         material_file: "{{ lookup('ansible.builtin.env', 'INVOICE_MATERIAL_FILE') }}"
         installed: '{{ remediation_installed.stdout | from_json }}'
       delegate_to: localhost

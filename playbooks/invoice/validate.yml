@@ -4,7 +4,7 @@
   connection: local
   gather_facts: false
   vars:
-    invoice_repository: http://forgejo.forgejo.svc.cluster.local:3000/demo-owner/ansible-collection-demo.webapp.git
+    invoice_repository: http://forgejo.forgejo.svc.cluster.local:3000/demo-owner/ansible-collection-demo.pythonapp.git
     invoice_test_environment:
       PROVISIONER: aws
       INVOICE_SOURCE_COMMIT: "{{ invoice_candidate_sha }}"
@@ -79,7 +79,7 @@
         - name: Locate the built collection artifact
           ansible.builtin.find:
             paths: '{{ invoice_validation_directory.path }}'
-            patterns: demo-webapp-*.tar.gz
+            patterns: demo-pythonapp-*.tar.gz
             file_type: file
             recurse: false
           register: invoice_built_collection
@@ -116,7 +116,7 @@
           environment: "{{ invoice_test_environment }}"
 
         - name: Validate the release lock with trusted policy before mandatory acceptance
-          demo.webapp.lightwell_plan:
+          demo.pythonapp.lightwell_plan:
             operation: release
             material_file: "{{ lookup('ansible.builtin.env', 'INVOICE_MATERIAL_FILE') }}"
             release_file: '{{ invoice_validation_directory.path }}/source/{{ invoice_validation_material.profile.application.release_manifest }}'

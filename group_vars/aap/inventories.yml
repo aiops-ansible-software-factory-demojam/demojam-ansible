@@ -1,6 +1,9 @@
 ---
 # Bootstrap owns the base demo-inventory; dispatch owns its SCM sources.
-controller_inventory_sources:
+controller_inventory_sources: >-
+  {{ demo_controller_inventory_sources + demo_pythonapp_inventory_sources
+     if demo_backend == 'aws' else demo_controller_inventory_sources }}
+demo_controller_inventory_sources:
   - name: demo-inventory-scm
     organization: demo
     inventory: demo-inventory
@@ -21,6 +24,22 @@ controller_inventory_sources:
     source_project: demojam-ansible
     source_path: "{{ 'dynamic/webapp.aws_ec2.yml' if demo_backend == 'aws' else 'dynamic/openshift-virtualization.kubevirt.yml' }}"
     credential: "{{ 'demo-aws-guest' if demo_backend == 'aws' else 'demo-virtualmachine-admin' }}"
+    execution_environment: demo-aap-ee
+    overwrite: true
+    overwrite_vars: true
+    update_on_launch: true
+    update_cache_timeout: 0
+    wait: true
+    timeout: 900
+
+demo_pythonapp_inventory_sources:
+  - name: demo-pythonapps
+    organization: demo
+    inventory: demo-inventory
+    source: scm
+    source_project: demojam-ansible
+    source_path: dynamic/pythonapp.aws_ec2.yml
+    credential: demo-aws-guest
     execution_environment: demo-aap-ee
     overwrite: true
     overwrite_vars: true

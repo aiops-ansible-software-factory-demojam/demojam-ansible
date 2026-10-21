@@ -20,3 +20,5 @@
   confined to automation-vms. Preserve the `host: demo_cluster` launch variable.
 - Verify cluster identity and current user authorization before live changes.
 - Read README.md for bootstrap, public SCM, and reset behavior.
+
+- `pythonapp_vm` manages only the separate AWS `pythonapp` host and its `pythonapp-vms` endpoints. Python jobs target `pythonapps` and use `demo.pythonapp`; SELinux/nginx jobs stay on `webapps`. Preserve this separation in inventory, tags and EDA repository routing.

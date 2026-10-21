@@ -21,3 +21,6 @@ collections:
   - name: http://forgejo.forgejo.svc.cluster.local:3000/demo-owner/ansible-collection-demo.webapp.git
     type: git
     version: main
+  - name: http://forgejo.forgejo.svc.cluster.local:3000/demo-owner/ansible-collection-demo.pythonapp.git
+    type: git
+    version: main

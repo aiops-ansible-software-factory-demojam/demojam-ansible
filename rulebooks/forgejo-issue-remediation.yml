@@ -10,12 +10,11 @@
     - name: Dispatch a newly opened invoice security incident
       condition: >-
         event.payload.action == "opened" and
-        event.payload.repository.full_name == "demo-owner/ansible-collection-demo.webapp" and
+        event.payload.repository.full_name == "demo-owner/ansible-collection-demo.pythonapp" and
         event.payload.issue.state == "open" and
         event.payload.issue.number > 0 and
         event.payload.issue.pull_request == null and
-        event.payload.issue.body is search("<!-- remediation:") and
-        event.payload.issue.body is search("Root Cause:")
+        event.payload.issue.body is search("<!-- remediation:")
       action:
         run_job_template:
           name: call_ao_webhook
