@@ -295,4 +295,12 @@
               name: Approve invoice production remediation
               description: 'Deploy tested source {{ invoice_candidate_sha }} after human PR merge.'
               timeout: 1800
+
+        # Approval creation returns an approval template, so associate edges
+        # in a separate call that resolves the workflow node itself.
+        - name: Link approved production releases to deployment
+          ansible.controller.workflow_job_template_node:
+            identifier: production-approval
+            workflow_job_template: 'invoice-promote-{{ invoice_candidate_sha }}-{{ invoice_factory_material.lightwell.sha256 }}'
+            organization: demo
             success_nodes: [deploy]

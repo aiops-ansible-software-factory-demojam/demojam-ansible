@@ -63,6 +63,21 @@ class InvoiceCredentialTests(unittest.TestCase):
         self.assertIsInstance(material, str)
         self.assertEqual(json.loads(material), self.material)
 
+    def test_approval_creation_and_success_link_use_separate_calls(self):
+        block = next(t for t in self.tasks if "block" in t)["block"]
+        nodes = [t["ansible.controller.workflow_job_template_node"] for t in block
+                 if "ansible.controller.workflow_job_template_node" in t]
+        approval = next(n for n in nodes if "approval_node" in n)
+        self.assertEqual(approval["identifier"], "production-approval")
+        self.assertEqual(approval["approval_node"]["timeout"], 1800)
+        self.assertNotIn("success_nodes", approval)
+        link = next(n for n in nodes if n.get("success_nodes") == ["deploy"])
+        self.assertEqual(link["identifier"], approval["identifier"])
+        self.assertEqual(link["workflow_job_template"], approval["workflow_job_template"])
+        self.assertNotIn("approval_node", link)
+        self.assertNotIn("always_nodes", link)
+        self.assertNotIn("failure_nodes", link)
+
 
 if __name__ == "__main__":
     unittest.main()
