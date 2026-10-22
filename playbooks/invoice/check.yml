@@ -5,80 +5,88 @@
   gather_facts: false
   strategy: linear
   vars:
-    remediation_material: "{{ lookup('ansible.builtin.file', lookup('ansible.builtin.env', 'INVOICE_MATERIAL_FILE')) | from_json }}"
-    remediation_profile: '{{ remediation_material.profile }}'
+    remediation_material: >-
+      {{ lookup('ansible.builtin.file', lookup('ansible.builtin.env', 'INVOICE_MATERIAL_FILE')) | from_json }}
+    remediation_profile: "{{ remediation_material.profile }}"
     remediation_base_url: "{{ remediation_profile.application.base_url | default('http://127.0.0.1') }}"
   tasks:
     - name: Read the actual running package identity
       ansible.builtin.uri:
-        url: '{{ remediation_base_url }}{{ remediation_profile.application.status_path | default("/api/status") }}'
+        url: >-
+          {{ remediation_base_url }}{{ remediation_profile.application.status_path | default("/api/status") }}
         return_content: true
       register: invoice_status
-
     - name: Read dependency metadata from the actual application Python environment
       ansible.builtin.command:
         argv:
-          - '{{ remediation_profile.application.python_executable }}'
+          - "{{ remediation_profile.application.python_executable }}"
           - -c
-          - >-
-            import importlib.metadata,json,sys;
-            print(json.dumps({'package':sys.argv[1],'version':importlib.metadata.version(sys.argv[1])}))
-          - '{{ remediation_profile.package.name }}'
+          - import importlib.metadata,json,sys; print(json.dumps({'package':sys.argv[1],'version':importlib.metadata.version(sys.argv[1])}))
+          - "{{ remediation_profile.package.name }}"
       register: remediation_installed
       changed_when: false
-
     - name: Assess the installed dependency using trusted advisory mappings
       demo.pythonapp.lightwell_plan:
         material_file: "{{ lookup('ansible.builtin.env', 'INVOICE_MATERIAL_FILE') }}"
-        installed: '{{ remediation_installed.stdout | from_json }}'
+        installed: "{{ remediation_installed.stdout | from_json }}"
       delegate_to: localhost
       become: false
       register: remediation_assessment
-
     - name: Run the configured business checks
       ansible.builtin.uri:
-        url: '{{ remediation_base_url }}{{ item.path }}'
-        method: '{{ item.method | default("GET") }}'
+        url: "{{ remediation_base_url }}{{ item.path }}"
+        method: "{{ item.method | default(\"GET\") }}"
         return_content: true
-      loop: '{{ remediation_profile.validation.business_checks }}'
+      loop: "{{ remediation_profile.validation.business_checks }}"
       register: remediation_business
-
     - name: Require successful business processing
       ansible.builtin.assert:
         that:
           - item.json.status == item.item.status
           - item.item.text_contains | default('') in item.json.text | default('')
-      loop: '{{ remediation_business.results }}'
+      loop: "{{ remediation_business.results }}"
       loop_control:
-        label: '{{ item.item.path }}'
-
+        label: "{{ item.item.path }}"
     - name: Exercise an optional application-specific regression
       when: remediation_profile.validation.regression is defined
       ansible.builtin.uri:
-        url: '{{ remediation_base_url }}{{ remediation_profile.validation.regression.path }}'
-        method: '{{ remediation_profile.validation.regression.method | default("POST") }}'
+        url: "{{ remediation_base_url }}{{ remediation_profile.validation.regression.path }}"
+        method: "{{ remediation_profile.validation.regression.method | default(\"POST\") }}"
         return_content: true
         timeout: 15
       register: invoice_regression
-
     - name: Record each host finding without inferring a CVE from a timeout
       ansible.builtin.set_fact:
         remediation_finding: >-
-            {{ remediation_assessment.finding | combine({
-              'host': inventory_hostname, 'business_passed': true,
-              'release': invoice_status.json.release | default({}),
-              'normal': remediation_business.results[0].json,
-              'business_checks': remediation_business.results | map(attribute='json') | list,
-              'regression': invoice_regression.json | default({})}) }}
-
+          {{ remediation_assessment.finding | combine({'host': inventory_hostname, 'business_passed': true, 'release':
+          invoice_status.json.release | default({}), 'normal': remediation_business.results[0].json, 'business_checks':
+          remediation_business.results | map(attribute='json') | list, 'regression': invoice_regression.json | default({})})
+          }}
+    - name: Require the exact promoted release and successful business regression
+      when: invoice_expected_source_revision is defined or invoice_expected_wheel_sha256 is defined
+      ansible.builtin.assert:
+        that:
+          - invoice_expected_source_revision | default('') is match('^[0-9a-f]{40}$')
+          - invoice_expected_wheel_sha256 | default('') is match('^[0-9a-f]{64}$')
+          - not remediation_finding.affected | bool
+          - remediation_finding.assessment_state == 'fixed'
+          - remediation_finding.business_passed | bool
+          - remediation_finding.release.source_revision == invoice_expected_source_revision
+          - remediation_finding.release.wheel_sha256 == invoice_expected_wheel_sha256
+          - remediation_finding.release.installed_version == remediation_finding.installed_version
+          - remediation_finding.regression.status == remediation_profile.validation.regression.remediated_status
+          - remediation_profile.validation.regression.text_contains | default('') in remediation_finding.regression.text
+            | default('')
+        fail_msg: Production verification differs from the independently tested and approved release.
     - name: Publish the complete host observations for this application
       when: inventory_hostname == ansible_play_hosts[0]
       vars:
-        remediation_observations: "{{ ansible_play_hosts | map('extract', hostvars, 'remediation_finding') | list }}"
+        remediation_observations: >-
+          {{ ansible_play_hosts | map('extract', hostvars, 'remediation_finding') | list }}
         remediation_affected: "{{ remediation_observations | selectattr('affected', 'equalto', true) | list }}"
       ansible.builtin.set_stats:
         aggregate: false
         data:
           invoice_findings: >-
             {{ ((remediation_affected | first) if remediation_affected | length > 0 else remediation_observations[0])
-               | combine({'hosts': ansible_play_hosts, 'observations': remediation_observations}) }}
+            | combine({'hosts': ansible_play_hosts, 'observations': remediation_observations}) }}

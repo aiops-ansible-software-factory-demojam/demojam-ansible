@@ -312,3 +312,21 @@ On AWS, `webapp_vm` and `pythonapp_vm` use the shared `playbooks/aws/application
 The Forgejo listener dispatches new Python security incidents from `demo-owner/ansible-collection-demo.pythonapp` using their structured remediation marker. The nginx RCA rule continues to target `demo-owner/ansible-collection-demo.webapp` and requires its outage marker and RCA. Application hosts share a bootstrap-managed SSH identity but have separate AAP credential names and EC2 key names; disposable test credentials remain separate from production provisioning.
 
 An upgrade job, `webapp_retire_legacy_invoice`, stops/disables only a former invoice unit found on the nginx host after bootstrap has installed the independent Python baseline. It preserves release files and does not target the new Python host.
+
+## Continuous invoice orchestration
+
+The existing invoice EDA entry now feeds one AO execution through PR discovery,
+independent validation, human merge, immutable release configuration, human AAP
+approval, deployment proof and application verification. `invoice_validation_status`
+uses a dedicated credential carrying the configured Controller API identity and
+Forgejo status writer, without production SSH or test AWS credentials. It reads
+trusted validation evidence before publishing a required check.
+`invoice_verify_deployment` reads the native workflow's approval/deployment nodes
+and actual job source/artifact before the application check can close the incident.
+The trusted project remains outside the coding agent's write permissions.
+
+Release configuration requires `invoice_issue_number` and `invoice_pr_number` as
+well as the exact `invoice_candidate_sha` and `invoice_validation_job_id`. The
+feature gate checks that the matching incident branch was human-merged and that
+its tested head is contained in main. Existing manual promotion supplies these
+identities automatically. No playbook approves or merges on the operator's behalf.

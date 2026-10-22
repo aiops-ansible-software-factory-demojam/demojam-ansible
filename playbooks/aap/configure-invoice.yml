@@ -58,6 +58,21 @@
             that:
               - invoice_candidate_sha is match('^[0-9a-f]{40}$')
               - invoice_validation_job_id | default(0) | int > 0
+              - invoice_pr_number | default(0) | int > 0
+              - invoice_issue_number | default(0) | int > 0
+        - name: Require human merge of the unchanged incident PR contained in main
+          ansible.builtin.uri:
+            url: >-
+              http://backstage-feature-gate.automation-orchestrator.svc:8080/invoice/pr?issue_number={{ invoice_issue_number
+              }}&pr_number={{ invoice_pr_number }}&head_sha={{ invoice_candidate_sha }}&require_merged=true
+            return_content: true
+            status_code: 200
+          register: invoice_merged_pr
+        - name: Refuse promotion before human merge
+          ansible.builtin.assert:
+            that:
+              - invoice_merged_pr.json.merged | bool
+              - invoice_merged_pr.json.head_sha == invoice_candidate_sha
         - name: Read independent AAP validation evidence
           ansible.builtin.uri:
             url: "{{ aap_hostname }}/api/controller/v2/jobs/{{ invoice_validation_job_id }}/"
@@ -123,3 +138,11 @@
             controller_credentials: "{{ invoice_release_controller_credentials }}"
             controller_templates: "{{ invoice_release_controller_templates }}"
             controller_workflows: "{{ invoice_release_controller_workflows }}"
+        - name: Expose the immutable approval workflow to AO
+          ansible.builtin.set_stats:
+            aggregate: false
+            data:
+              invoice_promotion_workflow: >-
+                invoice-promote-{{ invoice_candidate_sha }}-{{ invoice_factory_material.lightwell.sha256 }}
+              invoice_promotion_source_revision: "{{ invoice_candidate_sha }}"
+              invoice_promotion_validation_job: "{{ invoice_validation_job_id }}"

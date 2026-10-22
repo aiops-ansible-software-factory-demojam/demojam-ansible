@@ -1,0 +1,6 @@
+---
+invoice_review_api: "{{ lookup('ansible.builtin.env', 'AAP_HOST') }}/api/controller/v2"
+invoice_review_username: "{{ lookup('ansible.builtin.env', 'AAP_USERNAME') }}"
+invoice_review_password: "{{ lookup('ansible.builtin.env', 'AAP_PASSWORD') }}"
+invoice_repository_api: http://forgejo.forgejo.svc.cluster.local:3000/api/v1/repos/demo-owner/ansible-collection-demo.pythonapp
+invoice_repository_token: "{{ lookup('ansible.builtin.env', 'FORGEJO_API_TOKEN') }}"

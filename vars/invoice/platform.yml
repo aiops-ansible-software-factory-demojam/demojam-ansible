@@ -105,6 +105,29 @@ invoice_platform_controller_credential_types:
         MOLECULE_AWS_ROOT_VOLUME_SIZE: !unsafe "{{ root_volume_size }}"
         MOLECULE_AWS_SSH_CIDR: !unsafe "{{ ssh_cidr }}"
         MOLECULE_AWS_HTTP_CIDR: !unsafe "{{ http_cidr }}"
+  - name: Demo Invoice Review API
+    kind: cloud
+    inputs:
+      fields:
+        - id: host
+          label: AAP URL
+          type: string
+        - id: username
+          label: AAP review API username
+          type: string
+        - id: password
+          label: AAP review API password
+          type: string
+          secret: true
+      required:
+        - host
+        - username
+        - password
+    injectors:
+      env:
+        AAP_HOST: !unsafe "{{ host }}"
+        AAP_USERNAME: !unsafe "{{ username }}"
+        AAP_PASSWORD: !unsafe "{{ password }}"
 invoice_platform_controller_credentials:
   - name: demo-invoice-artifacts
     organization: demo
@@ -130,6 +153,13 @@ invoice_platform_controller_credentials:
       root_volume_size: "{{ invoice_factory_test_aws.config.root_volume_size | string }}"
       ssh_cidr: "{{ invoice_factory_test_aws.config.ssh_cidr | string }}"
       http_cidr: "{{ invoice_factory_test_aws.config.http_cidr | string }}"
+  - name: demo-invoice-review-api
+    organization: demo
+    credential_type: Demo Invoice Review API
+    inputs:
+      host: "{{ aap_hostname }}"
+      username: "{{ aap_username }}"
+      password: "{{ aap_password }}"
 invoice_platform_controller_execution_environments:
   - name: "{{ invoice_factory_ee_name }}"
     image: "{{ invoice_factory_ee }}"
@@ -196,6 +226,27 @@ invoice_platform_controller_templates:
     extra_vars:
       invoice_target_group: "{{ invoice_factory_material.profile.application.inventory_group }}"
     ask_scm_branch_on_launch: true
+    ask_variables_on_launch: true
+    allow_simultaneous: false
+  - name: invoice_validation_status
+    organization: demo
+    project: demojam-ansible
+    inventory: demo-inventory
+    execution_environment: "{{ invoice_factory_ee_name }}"
+    playbook: playbooks/invoice/publish-validation.yml
+    credentials:
+      - demo-invoice-review-api
+      - demo-forgejo-issues
+    ask_variables_on_launch: true
+    allow_simultaneous: false
+  - name: invoice_verify_deployment
+    organization: demo
+    project: demojam-ansible
+    inventory: demo-inventory
+    execution_environment: "{{ invoice_factory_ee_name }}"
+    playbook: playbooks/invoice/verify-deployment.yml
+    credentials:
+      - demo-invoice-review-api
     ask_variables_on_launch: true
     allow_simultaneous: false
 invoice_platform_controller_projects:
