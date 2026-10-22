@@ -36,20 +36,22 @@ class InvoiceCredentialTests(unittest.TestCase):
         })
         self.environment.start()
         self.addCleanup(self.environment.stop)
-        variables = yaml.safe_load((ROOT / "group_vars/invoice_factory/main.yml").read_text())
+        variables = yaml.safe_load((ROOT / "vars/invoice/factory.yml").read_text())
         self.templater = Templar(loader=DataLoader(), variables=variables)
         play = yaml.load((ROOT / "playbooks/aap/configure-invoice.yml").read_text(), Loader=InventoryLoader)[0]
         self.tasks = play["tasks"]
+        self.platform = yaml.load((ROOT / "vars/invoice/platform.yml").read_text(), Loader=InventoryLoader)
+        self.release = yaml.load((ROOT / "vars/invoice/release.yml").read_text(), Loader=InventoryLoader)
 
     def test_artifact_credential_contains_json_text(self):
-        task = next(t for t in self.tasks if t["name"] == "Register the artifact read credential")
-        material = self.templater.template(task["ansible.controller.credential"]["inputs"]["material"])
+        credential = next(c for c in self.platform["invoice_platform_controller_credentials"] if c["name"] == "demo-invoice-artifacts")
+        material = self.templater.template(credential["inputs"]["material"])
         self.assertIsInstance(material, str)
         self.assertEqual(json.loads(material), self.material)
 
     def test_all_test_identity_fields_remain_strings(self):
-        task = next(t for t in self.tasks if t["name"] == "Register the scoped test identity without production credentials")
-        inputs = self.templater.template(task["ansible.controller.credential"]["inputs"])
+        credential = next(c for c in self.platform["invoice_platform_controller_credentials"] if c["name"] == "demo-invoice-tests")
+        inputs = self.templater.template(credential["inputs"])
         for name, value in inputs.items():
             with self.subTest(name=name):
                 self.assertIsInstance(value, str)
@@ -57,26 +59,36 @@ class InvoiceCredentialTests(unittest.TestCase):
         self.assertEqual(inputs["root_volume_size"], "30")
 
     def test_release_snapshot_uses_the_same_json_boundary(self):
-        block = next(t for t in self.tasks if "block" in t)["block"]
-        task = next(t for t in block if "ansible.controller.credential" in t)
-        material = self.templater.template(task["ansible.controller.credential"]["inputs"]["material"])
+        credential = self.release["invoice_release_controller_credentials"][0]
+        material = self.templater.template(credential["inputs"]["material"])
         self.assertIsInstance(material, str)
         self.assertEqual(json.loads(material), self.material)
 
-    def test_approval_creation_and_success_link_use_separate_calls(self):
-        block = next(t for t in self.tasks if "block" in t)["block"]
-        nodes = [t["ansible.controller.workflow_job_template_node"] for t in block
-                 if "ansible.controller.workflow_job_template_node" in t]
+    def test_only_approved_workflow_path_reaches_pinned_deployment(self):
+        workflow = self.release["invoice_release_controller_workflows"][0]
+        nodes = workflow["simplified_workflow_nodes"]
         approval = next(n for n in nodes if "approval_node" in n)
         self.assertEqual(approval["identifier"], "production-approval")
         self.assertEqual(approval["approval_node"]["timeout"], 1800)
-        self.assertNotIn("success_nodes", approval)
-        link = next(n for n in nodes if n.get("success_nodes") == ["deploy"])
-        self.assertEqual(link["identifier"], approval["identifier"])
-        self.assertEqual(link["workflow_job_template"], approval["workflow_job_template"])
-        self.assertNotIn("approval_node", link)
-        self.assertNotIn("always_nodes", link)
-        self.assertNotIn("failure_nodes", link)
+        self.assertEqual(approval["success_nodes"], ["deploy"])
+        self.assertFalse(approval.get("always_nodes"))
+        self.assertFalse(approval.get("failure_nodes"))
+        self.assertEqual(len(nodes), 2)
+        deployment = self.release["invoice_release_controller_templates"][0]
+        self.assertFalse(deployment["ask_scm_branch_on_launch"])
+        self.assertFalse(deployment["ask_variables_on_launch"])
+        project = self.release["invoice_release_controller_projects"][0]
+        self.assertEqual(project["scm_branch"], "{{ invoice_candidate_sha }}")
+        self.assertFalse(project["allow_override"])
+
+    def test_dispatch_only_owns_invoice_resources_in_dependency_order(self):
+        dispatch = next(t for t in self.tasks if "ansible.builtin.include_role" in t)
+        self.assertEqual(dispatch["ansible.builtin.include_role"]["name"], "infra.aap_configuration.dispatch")
+        roles = dispatch["vars"]["controller_configuration_dispatcher_roles"]
+        self.assertEqual([r["var"] for r in roles], ["controller_credential_types", "controller_credentials",
+                         "controller_execution_environments", "controller_projects", "controller_templates"])
+        self.assertEqual(dispatch["vars"]["gateway_configuration_dispatcher_roles"], [])
+        self.assertEqual(dispatch["vars"]["hub_configuration_dispatcher_roles"], [])
 
 
 if __name__ == "__main__":

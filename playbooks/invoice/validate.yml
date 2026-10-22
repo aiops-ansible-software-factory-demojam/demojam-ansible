@@ -10,9 +10,9 @@
       INVOICE_SOURCE_COMMIT: "{{ invoice_candidate_sha }}"
       INVOICE_MATERIAL_FILE: "{{ lookup('ansible.builtin.env', 'INVOICE_MATERIAL_FILE') }}"
       INVOICE_SIGNING_KEY_FILE: "{{ lookup('ansible.builtin.env', 'INVOICE_SIGNING_KEY_FILE') }}"
-      ANSIBLE_ROLES_PATH: '{{ invoice_validation_directory.path }}/source/roles'
+      ANSIBLE_ROLES_PATH: "{{ invoice_validation_directory.path }}/source/roles"
       ANSIBLE_COLLECTIONS_PATH: "{{ invoice_validation_directory.path }}/installed:/usr/share/ansible/collections"
-      REMEDIATION_CANDIDATE_PLAYBOOK: '{{ invoice_validation_directory.path }}/source/playbooks/invoice-remediate.yml'
+      REMEDIATION_CANDIDATE_PLAYBOOK: "{{ invoice_validation_directory.path }}/source/playbooks/invoice-remediate.yml"
       MOLECULE_GLOB: extensions/molecule/*/molecule.yml
   tasks:
     - name: Validate the requested published commit
@@ -21,25 +21,23 @@
           - invoice_candidate_sha | default('') is match('^[0-9a-f]{40}$')
           - lookup('ansible.builtin.env', 'MOLECULE_AWS_DEPLOYMENT_ID') is match('^dj-[a-f0-9]{12}$')
           - lookup('ansible.builtin.env', 'INVOICE_MATERIAL_FILE') | length > 0
-
     - name: Read the operator-controlled application profile
       ansible.builtin.set_fact:
-        invoice_validation_material: "{{ lookup('ansible.builtin.file', lookup('ansible.builtin.env', 'INVOICE_MATERIAL_FILE')) | from_json }}"
+        invoice_validation_material: >-
+          {{ lookup('ansible.builtin.file', lookup('ansible.builtin.env', 'INVOICE_MATERIAL_FILE')) | from_json
+          }}
       no_log: true
-
     - name: Require an installed trusted acceptance adapter
       ansible.builtin.assert:
         that:
           - invoice_validation_material.profile.validation.adapter in ['invoice']
           - invoice_validation_material.profile.validation.scenario is match('^[a-zA-Z0-9_-]+$')
         fail_msg: Add and review an application acceptance adapter before testing this profile.
-
     - name: Allocate an isolated validation directory
       ansible.builtin.tempfile:
         state: directory
         prefix: invoice-validation-
       register: invoice_validation_directory
-
     - name: Run independent candidate validation
       block:
         - name: Check out the exact published commit
@@ -49,22 +47,23 @@
             version: "{{ invoice_candidate_sha }}"
             verify_commit: false
           register: invoice_checkout
-
         - name: Require the checkout to match the requested commit
           ansible.builtin.assert:
             that: invoice_checkout.after == invoice_candidate_sha
-
         - name: Check the isolated source before validation
           ansible.builtin.command:
-            argv: [git, status, --porcelain, --untracked-files=normal]
-            chdir: '{{ invoice_validation_directory.path }}/source'
+            argv:
+              - git
+              - status
+              - --porcelain
+              - --untracked-files=normal
+            chdir: "{{ invoice_validation_directory.path }}/source"
           register: invoice_source_before
           changed_when: false
           failed_when: invoice_source_before.stdout | trim | length > 0
-
         - name: Write an isolated inventory for syntax checks
           ansible.builtin.copy:
-            dest: '{{ invoice_validation_directory.path }}/lint-inventory.yml'
+            dest: "{{ invoice_validation_directory.path }}/lint-inventory.yml"
             mode: '0600'
             content: |
               ---
@@ -72,104 +71,120 @@
                 hosts:
                   localhost:
                     ansible_connection: local
-
         - name: Lint the candidate invoice automation
           ansible.builtin.command:
-            argv: [ansible-lint, roles/python_application, roles/invoice_portal, playbooks/invoice-remediate.yml, extensions/molecule/invoice_portal]
+            argv:
+              - ansible-lint
+              - roles/python_application
+              - playbooks
+              - extensions/molecule/invoice_portal
             chdir: "{{ invoice_validation_directory.path }}/source"
           changed_when: false
-          # Controller requires a parsed inventory; syntax checks do not use
-          # the production inventory or Molecule's not-yet-created guests.
-          environment: "{{ invoice_test_environment | combine({'ANSIBLE_INVENTORY': invoice_validation_directory.path ~ '/lint-inventory.yml'}) }}"
-
+          environment: >-
+            {{ invoice_test_environment | combine({'ANSIBLE_INVENTORY': invoice_validation_directory.path ~ '/lint-inventory.yml'})
+            }}
         - name: Build the candidate collection
           ansible.builtin.command:
-            argv: [ansible-galaxy, collection, build, --force, --output-path, "{{ invoice_validation_directory.path }}"]
+            argv:
+              - ansible-galaxy
+              - collection
+              - build
+              - --force
+              - --output-path
+              - "{{ invoice_validation_directory.path }}"
             chdir: "{{ invoice_validation_directory.path }}/source"
           changed_when: false
           environment: "{{ invoice_test_environment }}"
-
         - name: Locate the built collection artifact
           ansible.builtin.find:
-            paths: '{{ invoice_validation_directory.path }}'
+            paths: "{{ invoice_validation_directory.path }}"
             patterns: demo-pythonapp-*.tar.gz
             file_type: file
             recurse: false
           register: invoice_built_collection
-
         - name: Require one built collection artifact
           ansible.builtin.assert:
             that: invoice_built_collection.matched == 1
-
         - name: Record the built collection digest
           ansible.builtin.stat:
-            path: '{{ invoice_built_collection.files[0].path }}'
+            path: "{{ invoice_built_collection.files[0].path }}"
             checksum_algorithm: sha256
           register: invoice_collection_digest
-
         - name: Install the exact built candidate into a separate collection root
           ansible.builtin.command:
             argv:
               - ansible-galaxy
               - collection
               - install
-              - '{{ invoice_built_collection.files[0].path }}'
+              - "{{ invoice_built_collection.files[0].path }}"
               - --force
               - --no-deps
               - -p
-              - '{{ invoice_validation_directory.path }}/installed'
+              - "{{ invoice_validation_directory.path }}/installed"
           changed_when: false
           environment: "{{ invoice_test_environment }}"
-
         - name: Test the authored workflow on ephemeral RHEL EC2 instances
           ansible.builtin.command:
-            argv: [molecule, test, -s, "{{ invoice_validation_material.profile.validation.scenario }}"]
+            argv:
+              - molecule
+              - test
+              - -s
+              - "{{ invoice_validation_material.profile.validation.scenario }}"
             chdir: "{{ invoice_validation_directory.path }}/source"
           changed_when: false
           environment: "{{ invoice_test_environment }}"
-
         - name: Validate the release lock with trusted policy before mandatory acceptance
           demo.pythonapp.lightwell_plan:
             operation: release
             material_file: "{{ lookup('ansible.builtin.env', 'INVOICE_MATERIAL_FILE') }}"
-            release_file: '{{ invoice_validation_directory.path }}/source/{{ invoice_validation_material.profile.application.release_manifest }}'
+            release_file: >-
+              {{ invoice_validation_directory.path }}/source/{{ invoice_validation_material.profile.application.release_manifest
+              }}
           register: invoice_validated_release
-
         - name: Copy mandatory acceptance outside the candidate checkout
           ansible.builtin.copy:
             src: acceptance/
-            dest: '{{ invoice_validation_directory.path }}/acceptance/'
+            dest: "{{ invoice_validation_directory.path }}/acceptance/"
             mode: preserve
-
         - name: Render the trusted entry point for the exact candidate
           ansible.builtin.template:
             src: acceptance/molecule/converge.yml.j2
-            dest: '{{ invoice_validation_directory.path }}/acceptance/molecule/converge.yml'
+            dest: "{{ invoice_validation_directory.path }}/acceptance/molecule/converge.yml"
             mode: '0644'
-
         - name: Run the independently maintained acceptance lifecycle
           ansible.builtin.command:
-            argv: [molecule, --base-config, molecule.yml, test, -s, acceptance]
-            chdir: '{{ invoice_validation_directory.path }}/acceptance'
+            argv:
+              - molecule
+              - --base-config
+              - molecule.yml
+              - test
+              - -s
+              - acceptance
+            chdir: "{{ invoice_validation_directory.path }}/acceptance"
           changed_when: false
-          environment: "{{ invoice_test_environment | combine({'MOLECULE_GLOB': 'molecule/molecule.yml'}) }}"
-
+          environment: >-
+            {{ invoice_test_environment | combine({'MOLECULE_GLOB': 'molecule/molecule.yml'}) }}
         - name: Require the source to remain clean after the machine tests
           ansible.builtin.command:
-            argv: [git, status, --porcelain, --untracked-files=normal]
-            chdir: '{{ invoice_validation_directory.path }}/source'
+            argv:
+              - git
+              - status
+              - --porcelain
+              - --untracked-files=normal
+            chdir: "{{ invoice_validation_directory.path }}/source"
           register: invoice_source_after
           changed_when: false
           failed_when: invoice_source_after.stdout | trim | length > 0
-
         - name: Require the published commit to remain checked out
           ansible.builtin.command:
-            argv: [git, rev-parse, HEAD]
-            chdir: '{{ invoice_validation_directory.path }}/source'
+            argv:
+              - git
+              - rev-parse
+              - HEAD
+            chdir: "{{ invoice_validation_directory.path }}/source"
           register: invoice_head_after
           changed_when: false
           failed_when: invoice_head_after.stdout | trim != invoice_candidate_sha
-
         - name: Publish independent validation evidence
           ansible.builtin.set_stats:
             data:
@@ -177,54 +192,70 @@
                 passed: true
                 source_revision: "{{ invoice_checkout.after }}"
                 wheel_sha256: "{{ invoice_validation_material.lightwell.sha256 }}"
-                collection_sha256: '{{ invoice_collection_digest.stat.checksum }}'
+                collection_sha256: "{{ invoice_collection_digest.stat.checksum }}"
                 backend: aws
-                scenario: '{{ invoice_validation_material.profile.validation.scenario }}'
-                release_manifest_sha256: '{{ invoice_validated_release.release_sha256 }}'
+                scenario: "{{ invoice_validation_material.profile.validation.scenario }}"
+                release_manifest_sha256: "{{ invoice_validated_release.release_sha256 }}"
                 acceptance_suite: trusted-invoice-v1
-                application: '{{ invoice_validation_material.profile.application.id }}'
-                profile_sha256: "{{ invoice_validation_material.profile | to_json(sort_keys=true) | hash('sha256') }}"
-                lifecycle: [create, prepare, converge, idempotence, verify, destroy]
+                application: "{{ invoice_validation_material.profile.application.id }}"
+                profile_sha256: >-
+                  {{ invoice_validation_material.profile | to_json(sort_keys=true) | hash('sha256') }}
+                lifecycle:
+                  - create
+                  - prepare
+                  - converge
+                  - idempotence
+                  - verify
+                  - destroy
       rescue:
         - name: Check whether mandatory acceptance was initialized
           ansible.builtin.stat:
-            path: '{{ invoice_validation_directory.path }}/acceptance/molecule.yml'
+            path: "{{ invoice_validation_directory.path }}/acceptance/molecule.yml"
           register: invoice_acceptance_initialized
-
         - name: Destroy independently provisioned acceptance guests after failure
           when: invoice_acceptance_initialized.stat.exists
           ansible.builtin.command:
-            argv: [molecule, --base-config, molecule.yml, destroy, -s, acceptance]
-            chdir: '{{ invoice_validation_directory.path }}/acceptance'
-          environment: "{{ invoice_test_environment | combine({'MOLECULE_GLOB': 'molecule/molecule.yml'}) }}"
+            argv:
+              - molecule
+              - --base-config
+              - molecule.yml
+              - destroy
+              - -s
+              - acceptance
+            chdir: "{{ invoice_validation_directory.path }}/acceptance"
+          environment: >-
+            {{ invoice_test_environment | combine({'MOLECULE_GLOB': 'molecule/molecule.yml'}) }}
           register: invoice_acceptance_cleanup
           changed_when: false
           failed_when: false
-
         - name: Destroy disposable test resources after a failed validation
           ansible.builtin.command:
-            argv: [molecule, destroy, -s, "{{ invoice_validation_material.profile.validation.scenario }}"]
+            argv:
+              - molecule
+              - destroy
+              - -s
+              - "{{ invoice_validation_material.profile.validation.scenario }}"
             chdir: "{{ invoice_validation_directory.path }}/source"
           environment: "{{ invoice_test_environment }}"
           register: invoice_failed_cleanup
           changed_when: false
           failed_when: false
-
         - name: Publish cleanup state without claiming a passing validation
           ansible.builtin.set_stats:
             data:
-              invoice_cleanup_required: "{{ invoice_failed_cleanup.rc | default(1) != 0 or invoice_acceptance_cleanup.rc | default(0) != 0 }}"
-
+              invoice_cleanup_required: >-
+                {{ invoice_failed_cleanup.rc | default(1) != 0 or invoice_acceptance_cleanup.rc | default(0) !=
+                0 }}
         - name: Keep failed validation unsuccessful
           ansible.builtin.fail:
             msg: >-
-              Independent invoice validation failed. Disposable resource cleanup
-              returned {{ invoice_failed_cleanup.rc | default("unknown") }}. Inspect this job and the
-              deployment-tagged Molecule EC2 resources before another run.
+              Independent invoice validation failed. Disposable resource cleanup returned {{ invoice_failed_cleanup.rc
+              | default("unknown") }}. Inspect this job and the deployment-tagged Molecule EC2 resources before
+              another run.
       always:
         - name: Remove validation source and installed collection
-          when: not (invoice_failed_cleanup is defined and
-            (invoice_failed_cleanup.rc | default(1) != 0 or invoice_acceptance_cleanup.rc | default(0) != 0))
+          when: not (invoice_failed_cleanup is defined and (invoice_failed_cleanup.rc | default(1) != 0 or invoice_acceptance_cleanup.rc
+            | default(0) != 0))
           ansible.builtin.file:
             path: "{{ invoice_validation_directory.path }}"
             state: absent

@@ -1,16 +1,11 @@
 ---
-- name: Configure the invoice factory from inventory data
+- name: Configure invoice validation and approved promotion
   hosts: aap
   connection: local
   gather_facts: false
   vars_files:
-    - ../../group_vars/invoice_factory/main.yml
-  module_defaults:
-    group/ansible.controller.controller:
-      controller_host: "{{ aap_hostname }}"
-      controller_username: "{{ aap_username }}"
-      controller_password: "{{ aap_password }}"
-      validate_certs: true
+    - ../../vars/invoice/factory.yml
+    - ../../vars/invoice/platform.yml
   tasks:
     - name: Require runtime inputs
       ansible.builtin.assert:
@@ -21,179 +16,41 @@
           - invoice_factory_test_aws is mapping
           - invoice_factory_test_aws | length > 0
       no_log: true
-
-    - name: Register the invoice credential type
-      ansible.controller.credential_type:
-        name: Demo Invoice Artifacts
-        kind: cloud
-        inputs:
-          fields:
-            - {id: material, label: Repository access and artifact selection, type: string, secret: true, multiline: true}
-            - {id: signing_key, label: Trusted public signing key, type: string, multiline: true}
-          required: [material, signing_key]
-        injectors:
-          file:
-            template.material: !unsafe '{{ material }}'
-            template.signing_key: !unsafe '{{ signing_key }}'
-          env:
-            INVOICE_MATERIAL_FILE: !unsafe '{{ tower.filename.material }}'
-            INVOICE_SIGNING_KEY_FILE: !unsafe '{{ tower.filename.signing_key }}'
-
-    # Ansible 2.16 interprets bare JSON-looking templates as native mappings.
-    # Serialize at the credential boundary, where material must remain a string.
-    - name: Register the artifact read credential
-      ansible.controller.credential:
-        name: demo-invoice-artifacts
-        organization: demo
-        credential_type: Demo Invoice Artifacts
-        inputs:
-          material: "{{ invoice_factory_material | to_json }}"
-          signing_key: "{{ invoice_factory_public_key }}"
-      no_log: true
-
-    - name: Register the invoice test execution environment
-      ansible.controller.execution_environment:
-        name: '{{ invoice_factory_ee_name }}'
-        image: "{{ invoice_factory_ee }}"
-      register: invoice_registered_ee
-
-    - name: Register a credential type restricted to disposable EC2 tests
-      ansible.controller.credential_type:
-        name: Demo Invoice Test AWS
-        kind: cloud
-        inputs:
-          fields:
-            - {id: access_key_id, label: Test AWS access key ID, type: string, secret: true}
-            - {id: secret_access_key, label: Test AWS secret access key, type: string, secret: true}
-            - {id: region, label: AWS region, type: string}
-            - {id: account_id, label: Expected AWS account, type: string}
-            - {id: deployment_id, label: Owned deployment, type: string}
-            - {id: vpc_id, label: Test VPC, type: string}
-            - {id: subnet_id, label: Test subnet, type: string}
-            - {id: security_group_id, label: Test security group, type: string}
-            - {id: instance_type, label: Test instance type, type: string}
-            - {id: rhel9_ami_id, label: RHEL 9 image, type: string}
-            - {id: rhel10_ami_id, label: RHEL 10 image, type: string}
-            - {id: root_volume_size, label: Root volume size, type: string}
-            - {id: ssh_cidr, label: SSH source range, type: string}
-            - {id: http_cidr, label: HTTP source range, type: string}
-          required:
-            - access_key_id
-            - secret_access_key
-            - region
-            - account_id
-            - deployment_id
-            - vpc_id
-            - subnet_id
-            - security_group_id
-            - instance_type
-            - rhel9_ami_id
-            - rhel10_ami_id
-            - root_volume_size
-            - ssh_cidr
-            - http_cidr
-        injectors:
-          env:
-            AWS_ACCESS_KEY_ID: !unsafe '{{ access_key_id }}'
-            AWS_SECRET_ACCESS_KEY: !unsafe '{{ secret_access_key }}'
-            AWS_REGION: !unsafe '{{ region }}'
-            AWS_DEFAULT_REGION: !unsafe '{{ region }}'
-            AWS_EC2_METADATA_DISABLED: 'true'
-            PROVISIONER: aws
-            MOLECULE_AWS_ACCOUNT_ID: !unsafe '{{ account_id }}'
-            MOLECULE_AWS_DEPLOYMENT_ID: !unsafe '{{ deployment_id }}'
-            MOLECULE_AWS_VPC_ID: !unsafe '{{ vpc_id }}'
-            MOLECULE_AWS_SUBNET_ID: !unsafe '{{ subnet_id }}'
-            MOLECULE_AWS_SECURITY_GROUP_ID: !unsafe '{{ security_group_id }}'
-            MOLECULE_AWS_INSTANCE_TYPE: !unsafe '{{ instance_type }}'
-            MOLECULE_AWS_RHEL9_AMI_ID: !unsafe '{{ rhel9_ami_id }}'
-            MOLECULE_AWS_RHEL10_AMI_ID: !unsafe '{{ rhel10_ami_id }}'
-            MOLECULE_AWS_ROOT_VOLUME_SIZE: !unsafe '{{ root_volume_size }}'
-            MOLECULE_AWS_SSH_CIDR: !unsafe '{{ ssh_cidr }}'
-            MOLECULE_AWS_HTTP_CIDR: !unsafe '{{ http_cidr }}'
-
-    - name: Register the scoped test identity without production credentials
-      ansible.controller.credential:
-        name: demo-invoice-tests
-        organization: demo
-        credential_type: Demo Invoice Test AWS
-        inputs:
-          access_key_id: "{{ invoice_factory_test_aws.access_key_id | string }}"
-          secret_access_key: "{{ invoice_factory_test_aws.secret_access_key | string }}"
-          region: "{{ invoice_factory_test_aws.config.region | string }}"
-          account_id: "{{ invoice_factory_test_aws.config.account_id | string }}"
-          deployment_id: "{{ invoice_factory_test_aws.config.deployment_id | string }}"
-          vpc_id: "{{ invoice_factory_test_aws.config.vpc_id | string }}"
-          subnet_id: "{{ invoice_factory_test_aws.config.subnet_id | string }}"
-          security_group_id: "{{ invoice_factory_test_aws.config.molecule_security_group_id | string }}"
-          instance_type: "{{ invoice_factory_test_aws.config.molecule_instance_type | string }}"
-          rhel9_ami_id: "{{ invoice_factory_test_aws.config.rhel9_ami_id | string }}"
-          rhel10_ami_id: "{{ invoice_factory_test_aws.config.rhel10_ami_id | string }}"
-          root_volume_size: "{{ invoice_factory_test_aws.config.root_volume_size | string }}"
-          ssh_cidr: "{{ invoice_factory_test_aws.config.ssh_cidr | string }}"
-          http_cidr: "{{ invoice_factory_test_aws.config.http_cidr | string }}"
-      no_log: true
-
-    - name: Register independent validation of published candidate commits
-      ansible.controller.job_template:
-        name: invoice_validate
-        organization: demo
-        project: demojam-ansible
-        inventory: demo-inventory
-        execution_environment: '{{ invoice_factory_ee_name }}'
-        playbook: playbooks/invoice/validate.yml
-        credentials: [demo-invoice-tests, demo-invoice-artifacts]
-        ask_variables_on_launch: true
-        allow_simultaneous: false
-
-    - name: Register the application collection project
-      ansible.controller.project:
-        name: invoice-collection
-        organization: demo
-        scm_type: git
-        scm_url: "{{ invoice_factory_source }}"
-        scm_branch: main
-        allow_override: true
-        scm_clean: true
-        scm_update_on_launch: true
-        wait: true
-
-    - name: Register trusted invoice observation jobs
-      ansible.controller.job_template:
-        name: "{{ item.name }}"
-        organization: demo
-        project: demojam-ansible
-        inventory: demo-inventory
-        execution_environment: '{{ invoice_factory_ee_name }}'
-        playbook: "{{ item.playbook }}"
-        credentials: "{{ item.credentials }}"
-        become_enabled: "{{ item.become | default(false) }}"
-        extra_vars: '{{ item.extra_vars | default({}) }}'
-        ask_variables_on_launch: true
-        allow_simultaneous: false
-      loop:
-        - {name: invoice_check, playbook: playbooks/invoice/check.yml, credentials: [demo-pythonapp-ssh, demo-invoice-artifacts], become: true,
-           extra_vars: {remediation_target_group: '{{ invoice_factory_material.profile.application.inventory_group }}'}}
-        - {name: invoice_open_issue, playbook: playbooks/invoice/open-issue.yml, credentials: [demo-forgejo-issues]}
-        - {name: invoice_discover, playbook: playbooks/invoice/discover.yml, credentials: [demo-invoice-artifacts]}
-
-    - name: Register baseline deployment with an exact source override
-      ansible.controller.job_template:
-        name: invoice_baseline
-        organization: demo
-        project: invoice-collection
-        inventory: demo-inventory
-        execution_environment: '{{ invoice_factory_ee_name }}'
-        playbook: playbooks/invoice.yml
-        credentials: [demo-pythonapp-ssh, demo-invoice-artifacts]
-        become_enabled: true
-        extra_vars:
-          invoice_target_group: '{{ invoice_factory_material.profile.application.inventory_group }}'
-        ask_scm_branch_on_launch: true
-        ask_variables_on_launch: true
-        allow_simultaneous: false
-
-    - name: Configure production promotion only after independent validation
+    - name: Apply platform AAP resource definitions
+      ansible.builtin.include_role:
+        name: infra.aap_configuration.dispatch
+      vars:
+        aap_configuration_secure_logging: true
+        assign_default_ee_to_org: false
+        gateway_configuration_dispatcher_roles: []
+        hub_configuration_dispatcher_roles: []
+        controller_configuration_dispatcher_roles:
+          - role: controller_credential_types
+            var: controller_credential_types
+            tags:
+              - controller_credential_types
+          - role: controller_credentials
+            var: controller_credentials
+            tags:
+              - controller_credentials
+          - role: controller_execution_environments
+            var: controller_execution_environments
+            tags:
+              - controller_execution_environments
+          - role: controller_projects
+            var: controller_projects
+            tags:
+              - controller_projects
+          - role: controller_job_templates
+            var: controller_templates
+            tags:
+              - controller_templates
+        controller_credential_types: "{{ invoice_platform_controller_credential_types }}"
+        controller_credentials: "{{ invoice_platform_controller_credentials }}"
+        controller_execution_environments: "{{ invoice_platform_controller_execution_environments }}"
+        controller_templates: "{{ invoice_platform_controller_templates }}"
+        controller_projects: "{{ invoice_platform_controller_projects }}"
+    - name: Configure a validated production release
       when: invoice_candidate_sha is defined
       block:
         - name: Require an exact commit and an independent validation job
@@ -201,18 +58,28 @@
             that:
               - invoice_candidate_sha is match('^[0-9a-f]{40}$')
               - invoice_validation_job_id | default(0) | int > 0
-
         - name: Read independent AAP validation evidence
           ansible.builtin.uri:
-            url: '{{ aap_hostname }}/api/controller/v2/jobs/{{ invoice_validation_job_id }}/'
-            url_username: '{{ aap_username }}'
-            url_password: '{{ aap_password }}'
+            url: "{{ aap_hostname }}/api/controller/v2/jobs/{{ invoice_validation_job_id }}/"
+            url_username: "{{ aap_username }}"
+            url_password: "{{ aap_password }}"
             force_basic_auth: true
             validate_certs: true
             return_content: true
           register: invoice_validation_record
           no_log: true
-
+        - name: Read the execution environment used by validation
+          ansible.builtin.uri:
+            url: >-
+              {{ aap_hostname }}/api/controller/v2/execution_environments/{{ invoice_validation_record.json.execution_environment
+              }}/
+            url_username: "{{ aap_username }}"
+            url_password: "{{ aap_password }}"
+            force_basic_auth: true
+            validate_certs: true
+            return_content: true
+          register: invoice_validation_ee
+          no_log: true
         - name: Bind promotion to the successfully tested source and artifact
           ansible.builtin.assert:
             that:
@@ -221,86 +88,38 @@
               - invoice_validation_record.json.artifacts.invoice_validation.passed | bool
               - invoice_validation_record.json.artifacts.invoice_validation.source_revision == invoice_candidate_sha
               - invoice_validation_record.json.artifacts.invoice_validation.acceptance_suite == 'trusted-invoice-v1'
-              - >-
-                invoice_validation_record.json.artifacts.invoice_validation.profile_sha256 ==
-                (invoice_factory_material.profile | to_json(sort_keys=true) | hash('sha256'))
+              - invoice_validation_record.json.artifacts.invoice_validation.profile_sha256 == (invoice_factory_material.profile
+                | to_json(sort_keys=true) | hash('sha256'))
               - invoice_validation_record.json.artifacts.invoice_validation.wheel_sha256 == invoice_factory_material.lightwell.sha256
-              - invoice_validation_record.json.execution_environment == invoice_registered_ee.id
-
-        - name: Create an immutable production source project
-          ansible.controller.project:
-            name: 'invoice-reviewed-{{ invoice_candidate_sha[:12] }}'
-            organization: demo
-            scm_type: git
-            scm_url: '{{ invoice_factory_source }}'
-            scm_branch: '{{ invoice_candidate_sha }}'
-            allow_override: false
-            scm_clean: true
-            scm_update_on_launch: false
-            wait: true
-
-        - name: Snapshot the validated artifact selection for this release
-          ansible.controller.credential:
-            name: >-
-              invoice-release-{{ invoice_candidate_sha }}-{{ invoice_factory_material.lightwell.sha256 }}
-            organization: demo
-            credential_type: Demo Invoice Artifacts
-            inputs:
-              material: '{{ invoice_factory_material | to_json }}'
-              signing_key: '{{ invoice_factory_public_key }}'
-          no_log: true
-
-        - name: Register deployment of only the reviewed commit
-          ansible.controller.job_template:
-            name: 'invoice-deploy-{{ invoice_candidate_sha }}-{{ invoice_factory_material.lightwell.sha256 }}'
-            organization: demo
-            project: 'invoice-reviewed-{{ invoice_candidate_sha[:12] }}'
-            inventory: demo-inventory
-            execution_environment: '{{ invoice_factory_ee_name }}'
-            playbook: playbooks/invoice-remediate.yml
-            credentials:
-              - demo-pythonapp-ssh
-              - 'invoice-release-{{ invoice_candidate_sha }}-{{ invoice_factory_material.lightwell.sha256 }}'
-            become_enabled: true
-            ask_scm_branch_on_launch: false
-            ask_variables_on_launch: false
-            allow_simultaneous: false
-            extra_vars:
-              invoice_candidate_sha: '{{ invoice_candidate_sha }}'
-              invoice_release_channel: lightwell
-              invoice_target_group: '{{ invoice_factory_material.profile.application.inventory_group }}'
-              invoice_approved_wheel_sha256: '{{ invoice_factory_material.lightwell.sha256 }}'
-
-        - name: Register the production approval workflow
-          ansible.controller.workflow_job_template:
-            name: 'invoice-promote-{{ invoice_candidate_sha }}-{{ invoice_factory_material.lightwell.sha256 }}'
-            organization: demo
-            inventory: demo-inventory
-            ask_variables_on_launch: false
-            allow_simultaneous: false
-
-        - name: Create the deployment workflow node
-          ansible.controller.workflow_job_template_node:
-            identifier: deploy
-            workflow_job_template: 'invoice-promote-{{ invoice_candidate_sha }}-{{ invoice_factory_material.lightwell.sha256 }}'
-            organization: demo
-            unified_job_template: 'invoice-deploy-{{ invoice_candidate_sha }}-{{ invoice_factory_material.lightwell.sha256 }}'
-
-        - name: Gate deployment on explicit human approval
-          ansible.controller.workflow_job_template_node:
-            identifier: production-approval
-            workflow_job_template: 'invoice-promote-{{ invoice_candidate_sha }}-{{ invoice_factory_material.lightwell.sha256 }}'
-            organization: demo
-            approval_node:
-              name: Approve invoice production remediation
-              description: 'Deploy tested source {{ invoice_candidate_sha }} after human PR merge.'
-              timeout: 1800
-
-        # Approval creation returns an approval template, so associate edges
-        # in a separate call that resolves the workflow node itself.
-        - name: Link approved production releases to deployment
-          ansible.controller.workflow_job_template_node:
-            identifier: production-approval
-            workflow_job_template: 'invoice-promote-{{ invoice_candidate_sha }}-{{ invoice_factory_material.lightwell.sha256 }}'
-            organization: demo
-            success_nodes: [deploy]
+              - invoice_validation_ee.json.image == invoice_factory_ee
+        - name: Load release-specific AAP definitions
+          ansible.builtin.include_vars: ../../vars/invoice/release.yml
+        - name: Apply release AAP resource definitions
+          ansible.builtin.include_role:
+            name: infra.aap_configuration.dispatch
+          vars:
+            aap_configuration_secure_logging: true
+            assign_default_ee_to_org: false
+            gateway_configuration_dispatcher_roles: []
+            hub_configuration_dispatcher_roles: []
+            controller_configuration_dispatcher_roles:
+              - role: controller_credentials
+                var: controller_credentials
+                tags:
+                  - controller_credentials
+              - role: controller_projects
+                var: controller_projects
+                tags:
+                  - controller_projects
+              - role: controller_job_templates
+                var: controller_templates
+                tags:
+                  - controller_templates
+              - role: controller_workflow_job_templates
+                var: controller_workflows
+                tags:
+                  - controller_workflows
+            controller_projects: "{{ invoice_release_controller_projects }}"
+            controller_credentials: "{{ invoice_release_controller_credentials }}"
+            controller_templates: "{{ invoice_release_controller_templates }}"
+            controller_workflows: "{{ invoice_release_controller_workflows }}"

@@ -269,8 +269,10 @@ after a test-gated merge, with SELinux still enforcing.
 # Invoice factory configuration
 
 The optional invoice scenario is configured by
-`playbooks/aap/configure-invoice.yml` and inventory under
-`group_vars/invoice_factory`. It adds application observation, deduplicated
+`playbooks/aap/configure-invoice.yml` and vars files under
+`vars/invoice`. AAP resource definitions are applied through the pinned
+`infra.aap_configuration.dispatch` role. Application settings live in the
+collection's `vars/invoice.yml`, consumed directly by `python_application`. It adds application observation, deduplicated
 security issues, independent validation using a scoped EC2 test identity, and
 production workflows bound to a successfully tested collection SHA.
 The Forgejo EDA rule dispatches only newly opened invoice incidents to the
