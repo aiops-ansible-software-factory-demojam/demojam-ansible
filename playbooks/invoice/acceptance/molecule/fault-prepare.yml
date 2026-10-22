@@ -6,12 +6,15 @@
   vars:
     invoice_release_channel: baseline
     invoice_execution_revision: "{{ lookup('ansible.builtin.env', 'INVOICE_SOURCE_COMMIT') }}"
-    python_application_source: >-
-      {{ lookup('ansible.builtin.env', 'REMEDIATION_CANDIDATE_PLAYBOOK') | dirname }}/../files/invoice/
   tasks:
     - name: Install the previous release using the shared deployment contract
       ansible.builtin.include_role:
         name: demo.pythonapp.python_application
+      vars:
+        # Task vars override the application's vars_files entry, whose
+        # playbook_dir belongs to this independent acceptance playbook.
+        python_application_source: >-
+          {{ lookup('ansible.builtin.env', 'REMEDIATION_CANDIDATE_PLAYBOOK') | dirname }}/../files/invoice/
     - name: Create a canary-only systemd override directory
       when: inventory_hostname == groups['molecule'][0]
       ansible.builtin.file:
