@@ -290,6 +290,15 @@ keeps lint separate from production and Molecule inventories. In the development
 tools image, run `python3 tests/test_invoice_validation_inventory.py` to reproduce
 the missing-inventory failure and check that the isolated inventory fixes it.
 
+Before provisioning test guests, the validator runs the trusted acceptance source
+contract against the exact candidate checkout. This exercises Ansible's variable
+precedence and checks that rollback baseline preparation reads `files/invoice`
+from that collection. The acceptance task supplies its source override at task
+scope so the application's vars file cannot redirect it to the acceptance directory.
+Run `python3 -m unittest discover -s tests -p test_invoice_acceptance_source.py -v`
+locally with the Python collection checked out beside this repository, or set
+`DEMO_PYTHONAPP_SOURCE` to its checkout. This check does not provision guests.
+
 The invoice-named job entry points are compatibility names for the initial demo.
 Findings and incident keys are profile-driven; package/advisory identities are
 not hardcoded in the detection or ticket code. `invoice_discover` returns compatible

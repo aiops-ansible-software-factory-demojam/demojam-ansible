@@ -61,6 +61,21 @@
           register: invoice_source_before
           changed_when: false
           failed_when: invoice_source_before.stdout | trim | length > 0
+        - name: Check the trusted acceptance source contract before provisioning guests
+          ansible.builtin.command:
+            argv:
+              - "{{ ansible_playbook_python }}"
+              - -m
+              - unittest
+              - discover
+              - -s
+              - "{{ playbook_dir }}/../../tests"
+              - -p
+              - test_invoice_acceptance_source.py
+              - -v
+          changed_when: false
+          environment: >-
+            {{ invoice_test_environment | combine({'DEMO_PYTHONAPP_SOURCE': invoice_validation_directory.path ~ '/source'}) }}
         - name: Write an isolated inventory for syntax checks
           ansible.builtin.copy:
             dest: "{{ invoice_validation_directory.path }}/lint-inventory.yml"
