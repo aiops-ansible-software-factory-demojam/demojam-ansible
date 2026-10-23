@@ -7,6 +7,22 @@
         host: 0.0.0.0
         port: 5000
   rules:
+    - name: Dispatch a newly opened invoice security incident
+      condition: >-
+        event.payload.action == "opened" and
+        event.payload.repository.full_name == "demo-owner/ansible-collection-demo.pythonapp" and
+        event.payload.issue.state == "open" and
+        event.payload.issue.number > 0 and
+        event.payload.issue.pull_request == null and
+        event.payload.issue.body is search("<!-- remediation:")
+      action:
+        run_job_template:
+          name: call_ao_webhook
+          organization: demo
+          job_args:
+            extra_vars:
+              issue_number: "{{ event.payload.issue.number }}"
+              ao_webhook_path: invoice-security-remediation
     - name: Dispatch a newly opened incident with root cause analysis
       condition: >-
         event.payload.action == "opened" and

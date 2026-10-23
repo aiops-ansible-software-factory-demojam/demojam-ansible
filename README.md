@@ -266,3 +266,103 @@ The generic CNV job is registered only for CNV deployments.
 Both backends provision first, run the separate permissive setup job, and then
 install the unfixed collection. Recovery remains one `webapp_nginx` launch
 after a test-gated merge, with SELinux still enforcing.
+# Invoice factory configuration
+
+The optional invoice scenario is configured by
+`playbooks/aap/configure-invoice.yml` and vars files under
+`vars/invoice`. AAP resource definitions are applied through the pinned
+`infra.aap_configuration.dispatch` role. Application settings live in the
+collection's `vars/invoice.yml`, consumed directly by `python_application`. It adds application observation, deduplicated
+security issues, independent validation using a scoped EC2 test identity, and
+production workflows bound to a successfully tested collection SHA.
+The Forgejo EDA rule dispatches only newly opened invoice incidents to the
+invoice AO authoring workflow. See the GitOps repository's detailed
+[invoice walkthrough](https://github.com/aiops-ansible-software-factory-demojam/openshift-gitops/blob/feature/lightwell-invoice-demo/docs/invoice-lightwell-demo.md).
+
+In the supported Red Hat execution environment, run
+`python3 -m unittest discover -s tests -p test_invoice_configuration.py -v`
+to check the invoice credential serialization with dummy inputs. These checks
+exercise Ansible's native templating and do not connect to AWS or AAP.
+
+The validator supplies a temporary localhost inventory only to `ansible-lint`'s
+syntax checks. This preserves Controller's strict inventory parsing policy and
+keeps lint separate from production and Molecule inventories. In the development
+tools image, run `python3 tests/test_invoice_validation_inventory.py` to reproduce
+the missing-inventory failure and check that the isolated inventory fixes it.
+
+Before provisioning test guests, the validator runs the trusted acceptance source
+contract against the exact candidate checkout. This exercises Ansible's variable
+precedence and checks that rollback baseline preparation reads `files/invoice`
+from that collection. The acceptance task supplies its source override at task
+scope so the application's vars file cannot redirect it to the acceptance directory.
+Run `python3 -m unittest discover -s tests -p test_invoice_acceptance_source.py -v`
+locally with the Python collection checked out beside this repository, or set
+`DEMO_PYTHONAPP_SOURCE` to its checkout. This check does not provision guests.
+
+The invoice-named job entry points are compatibility names for the initial demo.
+Findings and incident keys are profile-driven; package/advisory identities are
+not hardcoded in the detection or ticket code. `invoice_discover` uses `demo.pythonapp.lightwell` task files with built-in
+Ansible modules. It joins the pinned public Lightwell OSV advisory feed to the
+PEP 691 JSON package index, requiring matching package/base version, complete
+CVE coverage, runtime compatibility and artifact/provenance identity. Bootstrap
+prepares the single eligible fix; ambiguity requires an operator approval pin.
+Discovery in AAP must match that prepared version and hash. Unknown versions
+remain unknown. Release validation uses Ansible assertions and a canonical JSON
+digest; it no longer invokes a custom module or a Python policy script.
+
+The mandatory suite under `playbooks/invoice/acceptance` is maintained separately
+from the candidate collection. Validation runs a second, independently provisioned
+RHEL 9/10 lifecycle, including business checks, actual installed wheel identity,
+independent regression documents, SELinux, and an activation-failure canary test.
+The candidate source remains clean. Failed cleanup preserves ownership metadata
+for recovery; never mark a failed validation successful after rollback.
+Promotion binds the tested source, wheel, execution image and application-profile
+digest. Add reviewed acceptance adapters for applications beyond the invoice app.
+
+## Independent application hosts
+
+On AWS, `webapp_vm` and `pythonapp_vm` use the shared `playbooks/aws/application-launch.yml` lifecycle through fixed application wrappers. They discover distinct deployment/purpose tags and publish endpoints into `webapp-vms` and `pythonapp-vms`. Dynamic inventory sources populate separate `webapps` and `pythonapps` groups. SELinux fault/nginx jobs target only `webapps`; invoice observation/deployment target only `pythonapps` with the `demo.pythonapp` collection.
+
+The Forgejo listener dispatches new Python security incidents from `demo-owner/ansible-collection-demo.pythonapp` using their structured remediation marker. The nginx RCA rule continues to target `demo-owner/ansible-collection-demo.webapp` and requires its outage marker and RCA. Application hosts share a bootstrap-managed SSH identity but have separate AAP credential names and EC2 key names; disposable test credentials remain separate from production provisioning.
+
+An upgrade job, `webapp_retire_legacy_invoice`, stops/disables only a former invoice unit found on the nginx host after bootstrap has installed the independent Python baseline. It preserves release files and does not target the new Python host.
+
+## Continuous invoice orchestration
+
+The existing invoice EDA entry now feeds one AO execution through PR discovery,
+independent validation, human merge, immutable launch contracts, human AAP
+approval, deployment proof and application verification. `invoice_validation_status`
+uses a dedicated credential carrying the configured Controller API identity and
+Forgejo status writer, without production SSH or test AWS credentials. It reads
+trusted validation evidence before publishing a required check.
+`invoice_verify_deployment` reads the native workflow's approval/deployment nodes
+and actual job source/artifact before the application check can close the incident.
+The trusted project remains outside the coding agent's write permissions.
+
+Release preparation requires `invoice_issue_number` and `invoice_pr_number` as
+well as the exact `invoice_candidate_sha` and `invoice_validation_job_id`. The
+feature gate checks that the matching incident branch was human-merged and that
+its tested head is contained in main. Existing manual promotion supplies these
+identities automatically. No playbook approves or merges on the operator's behalf.
+
+
+Promotion resources are configured once: the existing `invoice-collection`
+project, shared artifact credential, `invoice_deploy` JT and `invoice_promote`
+workflow. No project, credential, JT or workflow is generated per release.
+`invoice_prepare_release` checks human merge and independent validation, returning
+a public release contract with source, validation/incident IDs, artifact and
+material hashes, release-manifest hash and immutable execution image.
+
+AO launches `invoice_promote` with that contract and the exact tested SCM commit.
+The native AAP graph is `validate-release → production-approval → recheck-release
+→ deploy`. Both release checks use trusted controller content without production
+SSH. The post-approval check verifies this execution's actual human decision.
+The collection rechecks source, lock, target group and material before guest
+connection, closing the shared-credential drift window. The signing key remains
+independently pinned. Post-deployment proof checks both guard jobs, approval,
+actual source/image and emitted release evidence before AO closes the incident.
+
+Older acceptance records without `material_sha256` cannot authorize this path;
+run independent validation again. Old per-release objects are not deleted during
+configuration, so historical or running executions remain available. Remove them
+separately after confirming no execution still uses them.

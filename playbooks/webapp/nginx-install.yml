@@ -1,5 +1,5 @@
 ---
-- name: Install nginx on the demo RHEL webapp
+- name: Prepare the demo RHEL host for nginx deployment
   hosts: webapps
   become: true
   gather_facts: false
@@ -48,15 +48,5 @@
         - baseos
         - appstream
 
-  roles:
-    - role: demo.webapp.nginx
-
-  tasks:
-    - name: Check nginx serves HTTP inside the guest
-      ansible.builtin.uri:
-        url: http://127.0.0.1/
-        status_code: 200
-      register: webapp_http
-      until: webapp_http.status == 200
-      retries: 12
-      delay: 5
+- name: Deploy the collection-owned web application
+  ansible.builtin.import_playbook: demo.webapp.deploy_webapp

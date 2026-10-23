@@ -1,0 +1,42 @@
+---
+- name: Install the previous application release on both acceptance guests
+  hosts: molecule
+  become: true
+  gather_facts: true
+  vars:
+    invoice_release_channel: baseline
+    invoice_execution_revision: "{{ lookup('ansible.builtin.env', 'INVOICE_SOURCE_COMMIT') }}"
+  tasks:
+    - name: Install the previous release using the shared deployment contract
+      ansible.builtin.include_role:
+        name: demo.pythonapp.python_application
+      vars:
+        # Task vars override the application's vars_files entry, whose
+        # playbook_dir belongs to this independent acceptance playbook.
+        python_application_source: >-
+          {{ lookup('ansible.builtin.env', 'REMEDIATION_CANDIDATE_PLAYBOOK') | dirname }}/../files/invoice/
+    - name: Create a canary-only systemd override directory
+      when: inventory_hostname == groups['molecule'][0]
+      ansible.builtin.file:
+        path: /etc/systemd/system/invoice-portal.service.d
+        state: directory
+        mode: '0755'
+    - name: Inject a real activation failure on the first disposable guest
+      when: inventory_hostname == groups['molecule'][0]
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/invoice-portal.service.d/acceptance-fault.conf
+        mode: '0644'
+        content: |
+          [Service]
+          ExecStart=
+          ExecStart=/usr/bin/false
+          Restart=no
+    - name: Stop the canary before testing candidate activation
+      when: inventory_hostname == groups['molecule'][0]
+      ansible.builtin.systemd_service:
+        name: invoice-portal
+        daemon_reload: true
+        state: stopped
+  vars_files:
+    - >-
+      {{ lookup('ansible.builtin.env', 'REMEDIATION_CANDIDATE_PLAYBOOK') | dirname }}/../vars/invoice.yml

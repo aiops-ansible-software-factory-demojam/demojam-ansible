@@ -1,0 +1,57 @@
+---
+- name: Configure invoice validation and approved promotion
+  hosts: aap
+  connection: local
+  gather_facts: false
+  vars_files:
+    - ../../vars/invoice/factory.yml
+    - ../../vars/invoice/platform.yml
+  tasks:
+    - name: Require runtime inputs
+      ansible.builtin.assert:
+        that:
+          - invoice_factory_material is mapping
+          - invoice_factory_material | length > 0
+          - invoice_factory_ee | length > 0
+          - invoice_factory_test_aws is mapping
+          - invoice_factory_test_aws | length > 0
+      no_log: true
+    - name: Apply platform AAP resource definitions
+      ansible.builtin.include_role:
+        name: infra.aap_configuration.dispatch
+      vars:
+        aap_configuration_secure_logging: true
+        assign_default_ee_to_org: false
+        gateway_configuration_dispatcher_roles: []
+        hub_configuration_dispatcher_roles: []
+        controller_configuration_dispatcher_roles:
+          - role: controller_credential_types
+            var: controller_credential_types
+            tags:
+              - controller_credential_types
+          - role: controller_credentials
+            var: controller_credentials
+            tags:
+              - controller_credentials
+          - role: controller_execution_environments
+            var: controller_execution_environments
+            tags:
+              - controller_execution_environments
+          - role: controller_projects
+            var: controller_projects
+            tags:
+              - controller_projects
+          - role: controller_job_templates
+            var: controller_templates
+            tags:
+              - controller_templates
+          - role: controller_workflow_job_templates
+            var: controller_workflows
+            tags:
+              - controller_workflows
+        controller_credential_types: "{{ invoice_platform_controller_credential_types }}"
+        controller_credentials: "{{ invoice_platform_controller_credentials }}"
+        controller_execution_environments: "{{ invoice_platform_controller_execution_environments }}"
+        controller_templates: "{{ invoice_platform_controller_templates }}"
+        controller_projects: "{{ invoice_platform_controller_projects }}"
+        controller_workflows: "{{ invoice_platform_controller_workflows }}"

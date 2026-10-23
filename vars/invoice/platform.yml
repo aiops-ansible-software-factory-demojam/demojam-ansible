@@ -1,0 +1,316 @@
+---
+invoice_platform_controller_credential_types:
+  - name: Demo Invoice Artifacts
+    kind: cloud
+    inputs:
+      fields:
+        - id: material
+          label: Repository access and artifact selection
+          type: string
+          secret: true
+          multiline: true
+        - id: signing_key
+          label: Trusted public signing key
+          type: string
+          multiline: true
+      required:
+        - material
+        - signing_key
+    injectors:
+      file:
+        template.material: !unsafe "{{ material }}"
+        template.signing_key: !unsafe "{{ signing_key }}"
+      env:
+        INVOICE_MATERIAL_FILE: !unsafe "{{ tower.filename.material }}"
+        INVOICE_SIGNING_KEY_FILE: !unsafe "{{ tower.filename.signing_key }}"
+  - name: Demo Invoice Test AWS
+    kind: cloud
+    inputs:
+      fields:
+        - id: access_key_id
+          label: Test AWS access key ID
+          type: string
+          secret: true
+        - id: secret_access_key
+          label: Test AWS secret access key
+          type: string
+          secret: true
+        - id: region
+          label: AWS region
+          type: string
+        - id: account_id
+          label: Expected AWS account
+          type: string
+        - id: deployment_id
+          label: Owned deployment
+          type: string
+        - id: vpc_id
+          label: Test VPC
+          type: string
+        - id: subnet_id
+          label: Test subnet
+          type: string
+        - id: security_group_id
+          label: Test security group
+          type: string
+        - id: instance_type
+          label: Test instance type
+          type: string
+        - id: rhel9_ami_id
+          label: RHEL 9 image
+          type: string
+        - id: rhel10_ami_id
+          label: RHEL 10 image
+          type: string
+        - id: root_volume_size
+          label: Root volume size
+          type: string
+        - id: ssh_cidr
+          label: SSH source range
+          type: string
+        - id: http_cidr
+          label: HTTP source range
+          type: string
+      required:
+        - access_key_id
+        - secret_access_key
+        - region
+        - account_id
+        - deployment_id
+        - vpc_id
+        - subnet_id
+        - security_group_id
+        - instance_type
+        - rhel9_ami_id
+        - rhel10_ami_id
+        - root_volume_size
+        - ssh_cidr
+        - http_cidr
+    injectors:
+      env:
+        AWS_ACCESS_KEY_ID: !unsafe "{{ access_key_id }}"
+        AWS_SECRET_ACCESS_KEY: !unsafe "{{ secret_access_key }}"
+        AWS_REGION: !unsafe "{{ region }}"
+        AWS_DEFAULT_REGION: !unsafe "{{ region }}"
+        AWS_EC2_METADATA_DISABLED: 'true'
+        PROVISIONER: aws
+        MOLECULE_AWS_ACCOUNT_ID: !unsafe "{{ account_id }}"
+        MOLECULE_AWS_DEPLOYMENT_ID: !unsafe "{{ deployment_id }}"
+        MOLECULE_AWS_VPC_ID: !unsafe "{{ vpc_id }}"
+        MOLECULE_AWS_SUBNET_ID: !unsafe "{{ subnet_id }}"
+        MOLECULE_AWS_SECURITY_GROUP_ID: !unsafe "{{ security_group_id }}"
+        MOLECULE_AWS_INSTANCE_TYPE: !unsafe "{{ instance_type }}"
+        MOLECULE_AWS_RHEL9_AMI_ID: !unsafe "{{ rhel9_ami_id }}"
+        MOLECULE_AWS_RHEL10_AMI_ID: !unsafe "{{ rhel10_ami_id }}"
+        MOLECULE_AWS_ROOT_VOLUME_SIZE: !unsafe "{{ root_volume_size }}"
+        MOLECULE_AWS_SSH_CIDR: !unsafe "{{ ssh_cidr }}"
+        MOLECULE_AWS_HTTP_CIDR: !unsafe "{{ http_cidr }}"
+  - name: Demo Invoice Review API
+    kind: cloud
+    inputs:
+      fields:
+        - id: host
+          label: AAP URL
+          type: string
+        - id: username
+          label: AAP review API username
+          type: string
+        - id: password
+          label: AAP review API password
+          type: string
+          secret: true
+      required:
+        - host
+        - username
+        - password
+    injectors:
+      env:
+        AAP_HOST: !unsafe "{{ host }}"
+        AAP_USERNAME: !unsafe "{{ username }}"
+        AAP_PASSWORD: !unsafe "{{ password }}"
+invoice_platform_controller_credentials:
+  - name: demo-invoice-artifacts
+    organization: demo
+    credential_type: Demo Invoice Artifacts
+    inputs:
+      material: "{{ invoice_factory_material | to_json }}"
+      signing_key: "{{ invoice_factory_public_key }}"
+  - name: demo-invoice-tests
+    organization: demo
+    credential_type: Demo Invoice Test AWS
+    inputs:
+      access_key_id: "{{ invoice_factory_test_aws.access_key_id | string }}"
+      secret_access_key: "{{ invoice_factory_test_aws.secret_access_key | string }}"
+      region: "{{ invoice_factory_test_aws.config.region | string }}"
+      account_id: "{{ invoice_factory_test_aws.config.account_id | string }}"
+      deployment_id: "{{ invoice_factory_test_aws.config.deployment_id | string }}"
+      vpc_id: "{{ invoice_factory_test_aws.config.vpc_id | string }}"
+      subnet_id: "{{ invoice_factory_test_aws.config.subnet_id | string }}"
+      security_group_id: "{{ invoice_factory_test_aws.config.molecule_security_group_id | string }}"
+      instance_type: "{{ invoice_factory_test_aws.config.molecule_instance_type | string }}"
+      rhel9_ami_id: "{{ invoice_factory_test_aws.config.rhel9_ami_id | string }}"
+      rhel10_ami_id: "{{ invoice_factory_test_aws.config.rhel10_ami_id | string }}"
+      root_volume_size: "{{ invoice_factory_test_aws.config.root_volume_size | string }}"
+      ssh_cidr: "{{ invoice_factory_test_aws.config.ssh_cidr | string }}"
+      http_cidr: "{{ invoice_factory_test_aws.config.http_cidr | string }}"
+  - name: demo-invoice-review-api
+    organization: demo
+    credential_type: Demo Invoice Review API
+    inputs:
+      host: "{{ aap_hostname }}"
+      username: "{{ aap_username }}"
+      password: "{{ aap_password }}"
+invoice_platform_controller_execution_environments:
+  - name: "{{ invoice_factory_ee_name }}"
+    image: "{{ invoice_factory_ee }}"
+invoice_platform_controller_templates:
+  - name: invoice_validate
+    organization: demo
+    project: demojam-ansible
+    inventory: demo-inventory
+    execution_environment: "{{ invoice_factory_ee_name }}"
+    playbook: playbooks/invoice/validate.yml
+    credentials:
+      - demo-invoice-tests
+      - demo-invoice-artifacts
+    ask_variables_on_launch: true
+    allow_simultaneous: false
+  - name: invoice_check
+    organization: demo
+    project: demojam-ansible
+    inventory: demo-inventory
+    execution_environment: "{{ invoice_factory_ee_name }}"
+    playbook: playbooks/invoice/check.yml
+    credentials:
+      - demo-pythonapp-ssh
+      - demo-invoice-artifacts
+    become_enabled: true
+    extra_vars:
+      remediation_target_group: "{{ invoice_factory_material.profile.application.inventory_group }}"
+    ask_variables_on_launch: true
+    allow_simultaneous: false
+  - name: invoice_open_issue
+    organization: demo
+    project: demojam-ansible
+    inventory: demo-inventory
+    execution_environment: "{{ invoice_factory_ee_name }}"
+    playbook: playbooks/invoice/open-issue.yml
+    credentials:
+      - demo-forgejo-issues
+    become_enabled: false
+    extra_vars: {}
+    ask_variables_on_launch: true
+    allow_simultaneous: false
+  - name: invoice_discover
+    organization: demo
+    project: demojam-ansible
+    inventory: demo-inventory
+    execution_environment: "{{ invoice_factory_ee_name }}"
+    playbook: playbooks/invoice/discover.yml
+    credentials:
+      - demo-invoice-artifacts
+    become_enabled: false
+    extra_vars: {}
+    ask_variables_on_launch: true
+    allow_simultaneous: false
+  - name: invoice_baseline
+    organization: demo
+    project: invoice-collection
+    inventory: demo-inventory
+    execution_environment: "{{ invoice_factory_ee_name }}"
+    playbook: playbooks/invoice.yml
+    credentials:
+      - demo-pythonapp-ssh
+      - demo-invoice-artifacts
+    become_enabled: true
+    extra_vars:
+      invoice_target_group: "{{ invoice_factory_material.profile.application.inventory_group }}"
+    ask_scm_branch_on_launch: true
+    ask_variables_on_launch: true
+    allow_simultaneous: false
+  - name: invoice_validation_status
+    organization: demo
+    project: demojam-ansible
+    inventory: demo-inventory
+    execution_environment: "{{ invoice_factory_ee_name }}"
+    playbook: playbooks/invoice/publish-validation.yml
+    credentials:
+      - demo-invoice-review-api
+      - demo-forgejo-issues
+    ask_variables_on_launch: true
+    allow_simultaneous: false
+  - name: invoice_verify_deployment
+    organization: demo
+    project: demojam-ansible
+    inventory: demo-inventory
+    execution_environment: "{{ invoice_factory_ee_name }}"
+    playbook: playbooks/invoice/verify-deployment.yml
+    credentials:
+      - demo-invoice-review-api
+    ask_variables_on_launch: true
+    allow_simultaneous: false
+  - name: invoice_prepare_release
+    organization: demo
+    project: demojam-ansible
+    inventory: demo-inventory
+    execution_environment: "{{ invoice_factory_ee_name }}"
+    playbook: playbooks/invoice/prepare-release.yml
+    credentials:
+      - demo-invoice-review-api
+      - demo-invoice-artifacts
+    ask_variables_on_launch: true
+    allow_simultaneous: false
+  - name: invoice_deploy
+    organization: demo
+    project: invoice-collection
+    inventory: demo-inventory
+    execution_environment: "{{ invoice_factory_ee_name }}"
+    playbook: playbooks/invoice-remediate.yml
+    credentials:
+      - demo-pythonapp-ssh
+      - demo-invoice-artifacts
+    become_enabled: true
+    extra_vars:
+      invoice_release_channel: lightwell
+      invoice_target_group: "{{ invoice_factory_material.profile.application.inventory_group }}"
+    ask_scm_branch_on_launch: true
+    ask_variables_on_launch: true
+    allow_simultaneous: false
+invoice_platform_controller_projects:
+  - name: invoice-collection
+    organization: demo
+    scm_type: git
+    scm_url: "{{ invoice_factory_source }}"
+    scm_branch: main
+    allow_override: true
+    scm_clean: true
+    scm_update_on_launch: true
+    wait: true
+invoice_platform_controller_workflows:
+  - name: invoice_promote
+    organization: demo
+    description: Review the tested source and artifact in launch variables before approving production.
+    inventory: demo-inventory
+    ask_scm_branch_on_launch: true
+    ask_variables_on_launch: true
+    allow_simultaneous: false
+    simplified_workflow_nodes:
+      - identifier: validate-release
+        unified_job_template: invoice_prepare_release
+        success_nodes:
+          - production-approval
+      - identifier: production-approval
+        approval_node:
+          name: Approve invoice production remediation
+          description: Approve only the tested commit and artifact recorded in this workflow run.
+          timeout: 1800
+        success_nodes:
+          - recheck-release
+      - identifier: recheck-release
+        unified_job_template: invoice_prepare_release
+        extra_data:
+          invoice_require_production_approval: true
+        success_nodes:
+          - deploy
+      - identifier: deploy
+        unified_job_template: invoice_deploy

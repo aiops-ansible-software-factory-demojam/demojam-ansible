@@ -1,0 +1,7 @@
+---
+invoice_factory_source: http://forgejo.forgejo.svc.cluster.local:3000/demo-owner/ansible-collection-demo.pythonapp.git
+invoice_factory_ee: "{{ lookup('ansible.builtin.env', 'INVOICE_TEST_EE_IMAGE') }}"
+invoice_factory_ee_name: "invoice-test-{{ (invoice_factory_ee | hash('sha256'))[:16] }}"
+invoice_factory_material: "{{ lookup('ansible.builtin.env', 'DEMO_INVOICE_MATERIAL') | from_json }}"
+invoice_factory_public_key: "{{ lookup('ansible.builtin.env', 'DEMO_INVOICE_SIGNING_KEY') }}"
+invoice_factory_test_aws: "{{ lookup('ansible.builtin.env', 'DEMO_INVOICE_TEST_AWS') | from_json }}"

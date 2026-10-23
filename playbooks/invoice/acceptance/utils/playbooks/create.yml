@@ -1,0 +1,5 @@
+---
+- name: Provision acceptance guests using the pinned provisioner
+  ansible.builtin.import_playbook: david_igou.molecule_provisioners.create
+  vars:
+    molecule_scenario_name: "{{ lookup('ansible.builtin.env', 'MOLECULE_SCENARIO_NAME') }}"

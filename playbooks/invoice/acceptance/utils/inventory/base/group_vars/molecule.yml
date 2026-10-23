@@ -1,0 +1,34 @@
+---
+mp_backend: "{{ lookup('ansible.builtin.env', 'PROVISIONER', default='kubevirt') }}"
+mp_defaults:
+  aws:
+    region: "{{ lookup('ansible.builtin.env', 'AWS_REGION') }}"
+    expected_account_id: "{{ lookup('ansible.builtin.env', 'MOLECULE_AWS_ACCOUNT_ID') }}"
+    instance_type: "{{ lookup('ansible.builtin.env', 'MOLECULE_AWS_INSTANCE_TYPE', default='t3.medium') }}"
+    network:
+      mode: existing
+    vpc_id: "{{ lookup('ansible.builtin.env', 'MOLECULE_AWS_VPC_ID') }}"
+    subnet_id: "{{ lookup('ansible.builtin.env', 'MOLECULE_AWS_SUBNET_ID') }}"
+    security_groups:
+      - "{{ lookup('ansible.builtin.env', 'MOLECULE_AWS_SECURITY_GROUP_ID') }}"
+    ssh_user: ec2-user
+    root_disk:
+      size: "{{ lookup('ansible.builtin.env', 'MOLECULE_AWS_ROOT_VOLUME_SIZE', default='30') | int }}"
+      volume_type: gp3
+      encrypted: true
+    tags:
+      demojam:deployment: "{{ lookup('ansible.builtin.env', 'MOLECULE_AWS_DEPLOYMENT_ID') }}"
+      demojam:purpose: molecule
+      molecule_scenario: "{{ lookup('ansible.builtin.env', 'MOLECULE_SCENARIO_NAME') }}"
+  kubevirt:
+    namespace: molecule-tests
+    ssh_user: cloud-user
+    cpu:
+      cores: 2
+    memory: 2Gi
+    ssh_service:
+      type: PodIP
+    vm_overrides:
+      metadata:
+        labels:
+          app.kubernetes.io/part-of: molecule-tests

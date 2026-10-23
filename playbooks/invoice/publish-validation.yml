@@ -1,0 +1,70 @@
+---
+- name: Publish an independently proven required PR check
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - ../../vars/invoice/orchestration.yml
+  tasks:
+    - name: Require the exact published source identity
+      ansible.builtin.assert:
+        that:
+          - invoice_candidate_sha is match('^[0-9a-f]{40}$')
+    - name: Read validation provenance before reporting a result
+      when: not (invoice_status_pending | default(false) | bool)
+      block:
+        - name: Require a validation job identifier
+          ansible.builtin.assert:
+            that:
+              - invoice_validation_job_id | default(0) | int > 0
+        - name: Read the actual independent validation job
+          ansible.builtin.uri:
+            url: "{{ invoice_review_api }}/jobs/{{ invoice_validation_job_id }}/"
+            url_username: "{{ invoice_review_username }}"
+            url_password: "{{ invoice_review_password }}"
+            force_basic_auth: true
+            validate_certs: true
+            return_content: true
+          register: invoice_review_record
+          no_log: true
+          check_mode: false
+        - name: Require the trusted validator and requested source
+          ansible.builtin.assert:
+            that:
+              - invoice_review_record.json.summary_fields.job_template.name == 'invoice_validate'
+              - invoice_review_record.json.summary_fields.project.name == 'demojam-ansible'
+              - (invoice_review_record.json.extra_vars | from_json).invoice_candidate_sha == invoice_candidate_sha
+        - name: Derive success only from completed independent acceptance
+          ansible.builtin.set_fact:
+            invoice_review_passed: >-
+              {{ invoice_review_record.json.status == 'successful' and invoice_review_record.json.artifacts.invoice_validation.passed
+              | default(false) | bool and invoice_review_record.json.artifacts.invoice_validation.source_revision
+              | default('') == invoice_candidate_sha and invoice_review_record.json.artifacts.invoice_validation.acceptance_suite
+              | default('') == 'trusted-invoice-v1' and invoice_review_record.json.artifacts.invoice_validation.backend
+              | default('') == 'aws' }}
+    - name: Publish the required validation status without merging the PR
+      ansible.builtin.uri:
+        url: "{{ invoice_repository_api }}/statuses/{{ invoice_candidate_sha }}"
+        method: POST
+        headers:
+          Authorization: "token {{ invoice_repository_token }}"
+        body_format: json
+        body:
+          context: invoice/ec2-validation
+          state: >-
+            {{ 'pending' if invoice_status_pending | default(false) | bool else ('success' if invoice_review_passed
+            | bool else 'failure') }}
+          description: >-
+            {{ 'Independent AAP validation running' if invoice_status_pending | default(false) | bool else ('Exact
+            commit passed independent RHEL acceptance' if invoice_review_passed | bool else 'Independent acceptance
+            failed; inspect AAP') }}
+          target_url: >-
+            {{ '' if invoice_status_pending | default(false) | bool else (lookup('ansible.builtin.env', 'AAP_HOST')
+            + '/execution/jobs/playbook/' + (invoice_validation_job_id | string) + '/output') }}
+        status_code: 201
+      no_log: true
+    - name: Stop orchestration after an unsuccessful validation
+      when: not (invoice_status_pending | default(false) | bool)
+      ansible.builtin.assert:
+        that: invoice_review_passed | bool
+        fail_msg: Validation failed; its required PR check was marked unsuccessful. No promotion is allowed.

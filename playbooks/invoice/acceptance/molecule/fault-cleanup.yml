@@ -1,0 +1,16 @@
+---
+- name: Remove the acceptance-only activation fault
+  hosts: molecule
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Remove the acceptance-only systemd override
+      ansible.builtin.file:
+        path: /etc/systemd/system/invoice-portal.service.d/acceptance-fault.conf
+        state: absent
+
+    - name: Restart the restored application service
+      ansible.builtin.systemd_service:
+        name: invoice-portal
+        daemon_reload: true
+        state: started

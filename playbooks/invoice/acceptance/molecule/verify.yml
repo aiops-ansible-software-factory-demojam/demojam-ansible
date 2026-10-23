@@ -1,0 +1,45 @@
+---
+- name: Run mandatory acceptance before fault testing
+  ansible.builtin.import_playbook: check.yml
+
+- name: Exercise failed canary behavior without production fault flags
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    acceptance_inventory:
+      - --inventory=../utils/inventory/base/
+      - --inventory=../utils/inventory/aws/
+      - "--inventory={{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/inventory/"
+  tasks:
+    - name: Test the failed rollout and restore the service in all cases
+      block:
+        - name: Prepare the baseline and inject a systemd activation failure
+          ansible.builtin.command:
+            argv: '{{ ["ansible-playbook"] + acceptance_inventory + [playbook_dir + "/fault-prepare.yml"] }}'
+          changed_when: false
+
+        - name: Attempt candidate promotion with a failing first host
+          ansible.builtin.command:
+            argv: '{{ ["ansible-playbook"] + acceptance_inventory + [playbook_dir + "/converge.yml"] }}'
+          register: acceptance_failed_rollout
+          changed_when: false
+          failed_when: acceptance_failed_rollout.rc == 0
+
+        - name: Require recovery and an untouched follower
+          ansible.builtin.command:
+            argv: '{{ ["ansible-playbook"] + acceptance_inventory + [playbook_dir + "/fault-check.yml"] }}'
+          changed_when: false
+      always:
+        - name: Remove the injected service fault
+          ansible.builtin.command:
+            argv: '{{ ["ansible-playbook"] + acceptance_inventory + [playbook_dir + "/fault-cleanup.yml"] }}'
+          changed_when: false
+
+    - name: Reapply the approved release after fault testing
+      ansible.builtin.command:
+        argv: '{{ ["ansible-playbook"] + acceptance_inventory + [playbook_dir + "/converge.yml"] }}'
+      changed_when: false
+
+- name: Require final remediated business behavior
+  ansible.builtin.import_playbook: check.yml

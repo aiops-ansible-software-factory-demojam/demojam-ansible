@@ -1,0 +1,133 @@
+---
+- name: Reconcile a finding into a deduplicated application remediation ticket
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    invoice_issue_url: 'http://forgejo.forgejo.svc.cluster.local:3000/api/v1/repos/{{ invoice_findings.application_profile.repository }}/issues'
+    invoice_issue_marker: '<!-- remediation:{{ invoice_findings.incident_key }} -->'
+  tasks:
+    - name: Require a structured finding from trusted assessment
+      ansible.builtin.assert:
+        that:
+          - invoice_findings.schema_version == 1
+          - invoice_findings.incident_key is match('^[0-9a-f]{64}$')
+          - invoice_findings.application_profile.repository is match('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')
+          - invoice_findings.advisory_evidence | length > 0
+
+    - name: Initialize paginated issue reconciliation
+      ansible.builtin.set_fact:
+        remediation_issues: []
+        remediation_more_pages: true
+
+    - name: Read issue history without silently truncating it
+      ansible.builtin.include_tasks: tasks/issue-page.yml
+      loop: '{{ range(1, 101) | list }}'
+      loop_control:
+        loop_var: remediation_page
+
+    - name: Refuse a truncated issue history
+      ansible.builtin.assert:
+        that: not remediation_more_pages | bool
+        fail_msg: Repository issue history exceeds the configured 5000-item reconciliation bound.
+
+    - name: Match this application environment package and advisory identity
+      ansible.builtin.set_fact:
+        remediation_matches: "{{ remediation_issues | selectattr('body', 'search', invoice_issue_marker) | list }}"
+      no_log: true
+
+    - name: Find an existing open incident
+      ansible.builtin.set_fact:
+        remediation_open_matches: "{{ remediation_matches | selectattr('state', 'equalto', 'open') | list }}"
+
+    - name: Refuse ambiguous open incidents
+      ansible.builtin.assert:
+        that: remediation_open_matches | length <= 1
+
+    - name: Create a repeatable release authoring ticket when a supported fix exists
+      when:
+        - invoice_findings.affected | bool
+        - invoice_findings.fix_available | bool
+        - remediation_open_matches | length == 0
+      ansible.builtin.uri:
+        url: '{{ invoice_issue_url }}'
+        method: POST
+        headers:
+          Authorization: "token {{ lookup('ansible.builtin.env', 'FORGEJO_API_TOKEN') }}"
+        body_format: json
+        body:
+          title: 'Remediate {{ invoice_findings.package }} in {{ invoice_findings.application }}'
+          body: |
+            {{ invoice_issue_marker }}
+            Application: {{ invoice_findings.application }} ({{ invoice_findings.environment }})
+            Observed dependency: {{ invoice_findings.package }} {{ invoice_findings.installed_version }}
+            Advisories: {{ invoice_findings.advisories | join(', ') }}
+
+            Update {{ invoice_findings.application_profile.release_manifest }} to lock
+            the approved Lightwell package/version/digest below. Reuse the existing
+            deployment golden path; change automation only when required by this finding.
+            Add meaningful application regression coverage where available. Preserve
+            business behavior, artifact trust, rollout failure handling and host policy.
+            A signature is not advisory evidence. Do not infer CVE attribution from
+            a timeout, invent a fix, modify mandatory acceptance checks or change production.
+
+            Evidence and proposed artifact (no repository credentials):
+            {{ invoice_findings | to_nice_json }}
+
+            Compatible catalog candidates (availability is not approval):
+            {{ remediation_candidates | default([]) | to_nice_json }}
+
+            Test scenario: {{ invoice_findings.validation.scenario }}.
+            Run the full RHEL 9/10 EC2 lifecycle and report the actual committed SHA.
+            Human review, independent AAP acceptance, and production approval are required.
+            Prior incident count for this identity: {{ remediation_matches | length }}.
+        status_code: 201
+        return_content: true
+      register: invoice_created_issue
+      no_log: true
+
+    - name: Refresh evidence on an existing open incident
+      when:
+        - invoice_findings.affected | bool
+        - remediation_open_matches | length == 1
+      ansible.builtin.uri:
+        url: '{{ invoice_issue_url }}/{{ remediation_open_matches[0].number }}'
+        method: PATCH
+        headers:
+          Authorization: "token {{ lookup('ansible.builtin.env', 'FORGEJO_API_TOKEN') }}"
+        body_format: json
+        body:
+          body: |
+            {{ invoice_issue_marker }}
+            Update {{ invoice_findings.application_profile.release_manifest }} using
+            the approved selection below. Preserve artifact trust, mandatory acceptance,
+            business behavior, rollout recovery and human merge/production gates.
+            {{ invoice_findings | to_nice_json }}
+        status_code: [200, 201]
+      no_log: true
+
+    - name: Close an open incident only after observing a configured fixed version
+      when:
+        - not invoice_findings.affected | bool
+        - invoice_findings.assessment_state == 'fixed'
+        - invoice_findings.installed_version in (invoice_findings.advisory_evidence | map(attribute='fixed_versions') | flatten)
+        - invoice_findings.observations | default([invoice_findings]) | rejectattr('assessment_state', 'equalto', 'fixed') | list | length == 0
+        - remediation_open_matches | length == 1
+      ansible.builtin.uri:
+        url: '{{ invoice_issue_url }}/{{ remediation_open_matches[0].number }}'
+        method: PATCH
+        headers:
+          Authorization: "token {{ lookup('ansible.builtin.env', 'FORGEJO_API_TOKEN') }}"
+        body_format: json
+        body:
+          state: closed
+        status_code: [200, 201]
+      no_log: true
+
+    - name: Publish ticket reconciliation outcome
+      ansible.builtin.set_stats:
+        data:
+          remediation_incident_key: '{{ invoice_findings.incident_key }}'
+          remediation_fix_available: '{{ invoice_findings.fix_available }}'
+          invoice_issue_number: '{{ invoice_created_issue.json.number | default((remediation_open_matches | first | default({})).number | default(0)) }}'
+          invoice_issue_url: '{{ invoice_created_issue.json.html_url | default((remediation_open_matches | first | default({})).html_url | default("")) }}'
