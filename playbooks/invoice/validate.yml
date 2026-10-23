@@ -149,13 +149,13 @@
           changed_when: false
           environment: "{{ invoice_test_environment }}"
         - name: Validate the release lock with trusted policy before mandatory acceptance
-          demo.pythonapp.lightwell_plan:
-            operation: release
-            material_file: "{{ lookup('ansible.builtin.env', 'INVOICE_MATERIAL_FILE') }}"
-            release_file: >-
-              {{ invoice_validation_directory.path }}/source/{{ invoice_validation_material.profile.application.release_manifest
-              }}
-          register: invoice_validated_release
+          ansible.builtin.include_role:
+            name: demo.pythonapp.lightwell
+            tasks_from: release
+          vars:
+            lightwell_material: '{{ invoice_validation_material }}'
+            lightwell_release_file: >-
+              {{ invoice_validation_directory.path }}/source/{{ invoice_validation_material.profile.application.release_manifest }}
         - name: Copy mandatory acceptance outside the candidate checkout
           ansible.builtin.copy:
             src: acceptance/
@@ -210,7 +210,7 @@
                 collection_sha256: "{{ invoice_collection_digest.stat.checksum }}"
                 backend: aws
                 scenario: "{{ invoice_validation_material.profile.validation.scenario }}"
-                release_manifest_sha256: "{{ invoice_validated_release.release_sha256 }}"
+                release_manifest_sha256: "{{ lightwell_release_sha256 }}"
                 acceptance_suite: trusted-invoice-v1
                 application: "{{ invoice_validation_material.profile.application.id }}"
                 profile_sha256: >-

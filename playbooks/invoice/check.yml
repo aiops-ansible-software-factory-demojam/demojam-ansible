@@ -25,13 +25,13 @@
           - "{{ remediation_profile.package.name }}"
       register: remediation_installed
       changed_when: false
-    - name: Assess the installed dependency using trusted advisory mappings
-      demo.pythonapp.lightwell_plan:
-        material_file: "{{ lookup('ansible.builtin.env', 'INVOICE_MATERIAL_FILE') }}"
-        installed: "{{ remediation_installed.stdout | from_json }}"
-      delegate_to: localhost
-      become: false
-      register: remediation_assessment
+    - name: Assess the installed dependency using prepared advisory mappings
+      ansible.builtin.include_role:
+        name: demo.pythonapp.lightwell
+        tasks_from: assess
+      vars:
+        lightwell_material: '{{ remediation_material }}'
+        lightwell_installed: '{{ remediation_installed.stdout | from_json }}'
     - name: Run the configured business checks
       ansible.builtin.uri:
         url: "{{ remediation_base_url }}{{ item.path }}"
@@ -58,7 +58,7 @@
     - name: Record each host finding without inferring a CVE from a timeout
       ansible.builtin.set_fact:
         remediation_finding: >-
-          {{ remediation_assessment.finding | combine({'host': inventory_hostname, 'business_passed': true, 'release':
+          {{ lightwell_finding | combine({'host': inventory_hostname, 'business_passed': true, 'release':
           invoice_status.json.release | default({}), 'normal': remediation_business.results[0].json, 'business_checks':
           remediation_business.results | map(attribute='json') | list, 'regression': invoice_regression.json | default({})})
           }}

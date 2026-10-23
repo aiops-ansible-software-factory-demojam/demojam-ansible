@@ -301,9 +301,14 @@ locally with the Python collection checked out beside this repository, or set
 
 The invoice-named job entry points are compatibility names for the initial demo.
 Findings and incident keys are profile-driven; package/advisory identities are
-not hardcoded in the detection or ticket code. `invoice_discover` returns compatible
-Lightwell catalog candidates without automatically selecting a version. Explicit
-advisory/version mappings and operator artifact approval remain required.
+not hardcoded in the detection or ticket code. `invoice_discover` uses `demo.pythonapp.lightwell` task files with built-in
+Ansible modules. It joins the pinned public Lightwell OSV advisory feed to the
+PEP 691 JSON package index, requiring matching package/base version, complete
+CVE coverage, runtime compatibility and artifact/provenance identity. Bootstrap
+prepares the single eligible fix; ambiguity requires an operator approval pin.
+Discovery in AAP must match that prepared version and hash. Unknown versions
+remain unknown. Release validation uses Ansible assertions and a canonical JSON
+digest; it no longer invokes a custom module or a Python policy script.
 
 The mandatory suite under `playbooks/invoice/acceptance` is maintained separately
 from the candidate collection. Validation runs a second, independently provisioned

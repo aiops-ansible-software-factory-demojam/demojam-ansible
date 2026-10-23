@@ -1,17 +1,21 @@
 ---
-- name: Discover compatible Lightwell candidates without selecting latest
+- name: Discover vendor-advised compatible Lightwell fixes
   hosts: localhost
   connection: local
   gather_facts: false
   tasks:
-    - name: Query the authenticated catalog for the configured application package
-      demo.pythonapp.lightwell_plan:
-        operation: discover
-        material_file: "{{ lookup('ansible.builtin.env', 'INVOICE_MATERIAL_FILE') }}"
-      register: remediation_catalog
-
+    - name: Query vendor advisories and the authenticated JSON catalog
+      ansible.builtin.import_role:
+        name: demo.pythonapp.lightwell
+        tasks_from: discover
+    - name: Bind discovery to the immutable prepared artifact
+      ansible.builtin.assert:
+        that:
+          - lightwell_selection == {} or lightwell_selection.sha256 == lightwell_material.lightwell.sha256
+          - lightwell_selection == {} or lightwell_selection.version == lightwell_material.lightwell.version
+        fail_msg: Refresh and approve prepared material before dispatching a newly discovered artifact.
     - name: Publish candidate identities without repository credentials
       ansible.builtin.set_stats:
         data:
-          remediation_candidates: '{{ remediation_catalog.candidates }}'
-          remediation_selection_required: true
+          remediation_candidates: '{{ lightwell_candidates }}'
+          remediation_selection_required: false
