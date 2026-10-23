@@ -40,6 +40,11 @@
       ansible.builtin.set_fact:
         remediation_open_matches: "{{ remediation_matches | selectattr('state', 'equalto', 'open') | list }}"
 
+    - name: Find security response records for the same incident identity
+      ansible.builtin.set_fact:
+        remediation_response_matches: >-
+          {{ remediation_issues | selectattr('body', 'search', '<!-- security-response:' ~ invoice_findings.incident_key ~ ' -->')
+          | selectattr('state', 'equalto', 'open') | list }}
     - name: Refuse ambiguous open incidents
       ansible.builtin.assert:
         that: remediation_open_matches | length <= 1
@@ -112,9 +117,14 @@
         - invoice_findings.assessment_state == 'fixed'
         - invoice_findings.installed_version in (invoice_findings.advisory_evidence | map(attribute='fixed_versions') | flatten)
         - invoice_findings.observations | default([invoice_findings]) | rejectattr('assessment_state', 'equalto', 'fixed') | list | length == 0
-        - remediation_open_matches | length == 1
+        - >-
+          invoice_findings.observations | default([invoice_findings]) | selectattr('business_passed', 'equalto', true)
+          | list | length == (invoice_findings.observations | default([invoice_findings]) | length)
+      loop: '{{ remediation_open_matches + remediation_response_matches }}'
+      loop_control:
+        label: '{{ item.number }}'
       ansible.builtin.uri:
-        url: '{{ invoice_issue_url }}/{{ remediation_open_matches[0].number }}'
+        url: '{{ invoice_issue_url }}/{{ item.number }}'
         method: PATCH
         headers:
           Authorization: "token {{ lookup('ansible.builtin.env', 'FORGEJO_API_TOKEN') }}"
