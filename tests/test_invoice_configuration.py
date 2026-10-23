@@ -63,7 +63,7 @@ class InvoiceCredentialTests(unittest.TestCase):
         self.assertEqual(names.count('invoice_deploy'), 1)
         self.assertEqual(names.count('invoice_prepare_release'), 1)
         self.assertEqual(len(self.platform['invoice_platform_controller_projects']), 1)
-        self.assertEqual(len(self.platform['invoice_platform_controller_workflows']), 1)
+        self.assertEqual(len(self.platform['invoice_platform_controller_workflows']), 2)
         self.assertFalse(any('invoice_candidate_sha' in n for n in names))
 
     def test_only_approved_rechecked_workflow_path_reaches_deployment(self):
@@ -88,6 +88,19 @@ class InvoiceCredentialTests(unittest.TestCase):
         self.assertEqual(deployment['project'], 'invoice-collection')
         self.assertNotIn('demo-invoice-review-api', deployment['credentials'])
         self.assertTrue(self.platform['invoice_platform_controller_projects'][0]['allow_override'])
+
+    def test_containment_has_a_separate_approval_and_trusted_recheck(self):
+        workflow = next(w for w in self.platform['invoice_platform_controller_workflows'] if w['name'] == 'invoice_contain')
+        nodes = {n['identifier']: n for n in workflow['simplified_workflow_nodes']}
+        self.assertEqual(nodes['validate-request']['success_nodes'], ['containment-approval'])
+        self.assertEqual(nodes['containment-approval']['success_nodes'], ['recheck-request'])
+        self.assertTrue(nodes['recheck-request']['extra_data']['invoice_require_containment_approval'])
+        self.assertEqual(nodes['recheck-request']['success_nodes'], ['contain'])
+        for node in nodes.values():
+            self.assertFalse(node.get('always_nodes'))
+            self.assertFalse(node.get('failure_nodes'))
+        containment = next(t for t in self.platform['invoice_platform_controller_templates'] if t['name'] == 'invoice_contain_service')
+        self.assertNotIn('demo-invoice-review-api', containment['credentials'])
 
     def test_dispatch_only_owns_invoice_resources_in_dependency_order(self):
         dispatch = next(t for t in self.tasks if "ansible.builtin.include_role" in t)

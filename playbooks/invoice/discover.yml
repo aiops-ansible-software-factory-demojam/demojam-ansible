@@ -17,5 +17,6 @@
     - name: Publish candidate identities without repository credentials
       ansible.builtin.set_stats:
         data:
+          remediation_material_sha256: '{{ lightwell_material.profile | to_json(sort_keys=true) | hash("sha256") }}'
           remediation_candidates: '{{ lightwell_candidates }}'
           remediation_selection_required: false

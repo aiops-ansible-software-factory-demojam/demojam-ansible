@@ -1,0 +1,34 @@
+---
+- name: Require the independent assessment job identity
+  ansible.builtin.assert:
+    that: invoice_assessment_job_id | int > 0
+- name: Read the independently executed application assessment
+  ansible.builtin.uri:
+    url: '{{ invoice_review_api }}/jobs/{{ invoice_assessment_job_id }}/'
+    url_username: '{{ invoice_review_username }}'
+    url_password: '{{ invoice_review_password }}'
+    force_basic_auth: true
+    validate_certs: true
+    return_content: true
+  register: invoice_assessment_record
+  no_log: true
+  check_mode: false
+- name: Require trusted successful assessment of the current application profile
+  ansible.builtin.assert:
+    that:
+      - invoice_assessment_record.json.status == 'successful'
+      - invoice_assessment_record.json.summary_fields.job_template.name == 'invoice_check'
+      - invoice_assessment_record.json.summary_fields.project.name == 'demojam-ansible'
+      - invoice_assessment_record.json.artifacts.invoice_findings.schema_version == 1
+      - invoice_assessment_record.json.artifacts.invoice_findings.profile_sha256 == (invoice_response_material.profile
+            | to_json(sort_keys=true) | hash('sha256'))
+- name: Select the independently observed finding
+  ansible.builtin.set_fact:
+    invoice_routing_finding: '{{ invoice_assessment_record.json.artifacts.invoice_findings }}'
+- name: Require complete consistent observations rather than silently excluding hosts
+  ansible.builtin.assert:
+    that:
+      - invoice_routing_finding.hosts | length > 0
+      - invoice_routing_finding.hosts | unique | length == invoice_routing_finding.hosts | length
+      - invoice_routing_finding.observations | map(attribute='host') | sort | list == invoice_routing_finding.hosts | sort
+      - invoice_routing_finding.observations | map(attribute='profile_sha256') | unique | list == [invoice_routing_finding.profile_sha256]

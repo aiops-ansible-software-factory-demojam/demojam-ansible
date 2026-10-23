@@ -1,0 +1,41 @@
+---
+- name: Read operator response policy and assessment states
+  ansible.builtin.set_fact:
+    invoice_response_policy: '{{ invoice_response_material.profile.response | default({}) }}'
+    invoice_response_states: '{{ invoice_routing_finding.observations | map(attribute="assessment_state") | unique | list }}'
+    invoice_response_scores: '{{ invoice_response_material.profile.advisories | selectattr("cvss_score", "defined") | map(attribute="cvss_score") | list }}'
+- name: Validate severity and response policy instead of accepting a route override
+  ansible.builtin.assert:
+    that:
+      - invoice_response_policy.high_severity_threshold | default(7.0) | float >= 0
+      - invoice_response_policy.high_severity_threshold | default(7.0) | float <= 10
+      - invoice_response_policy.review_in_days | default(30) | int > 0
+      - invoice_response_policy.review_in_days | default(30) | int <= 30
+      - invoice_response_policy.containment | default('manual') in ['manual', 'stop_service']
+      - invoice_response_scores | select('number') | list | length == invoice_response_scores | length
+      - invoice_response_scores | select('lt', 0) | list | length == 0
+      - invoice_response_scores | select('gt', 10) | list | length == 0
+- name: Calculate conservative routing facts
+  ansible.builtin.set_fact:
+    invoice_response_known: '{{ invoice_response_states | difference(["affected", "fixed"]) | length == 0 }}'
+    invoice_response_affected: '{{ "affected" in invoice_response_states }}'
+    invoice_response_score_known: '{{ invoice_response_scores | length == invoice_response_material.profile.advisories | length }}'
+    invoice_response_score: '{{ invoice_response_scores | max if invoice_response_scores | length > 0 else -1 }}'
+- name: Choose one policy-governed CVE response
+  ansible.builtin.set_fact:
+    invoice_response_route: >-
+      {% if invoice_response_material.profile.package.ecosystem | default('pypi') != 'pypi' %}manual_review
+      {% elif not invoice_response_known | bool %}manual_review
+      {% elif not invoice_response_affected | bool %}log_only
+      {% elif invoice_routing_finding.fix_available | bool and invoice_response_fix_confirmed | bool %}app_patch
+      {% elif not invoice_response_score_known | bool %}manual_review
+      {% elif invoice_response_score | float < invoice_response_policy.high_severity_threshold | default(7.0) | float %}log_only
+      {% elif invoice_response_policy.containment | default('manual') == 'stop_service' and invoice_response_states == ['affected'] %}contain
+      {% else %}manual_review{% endif %}
+- name: Record an inspectable routing reason
+  ansible.builtin.set_fact:
+    invoice_response_reason: >-
+      {{ {'app_patch': 'An affected dependency has a compatible approved Lightwell fix.',
+          'contain': 'An affected high-severity dependency has no confirmed approved fix; temporary service shutdown requires approval.',
+          'log_only': 'No affected dependency was observed, or the known no-fix severity is below the configured threshold; retain evidence and review.',
+          'manual_review': 'Assessment, severity or automated mitigation support is incomplete; security review is required.'}[invoice_response_route | trim] }}
