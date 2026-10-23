@@ -1,0 +1,124 @@
+---
+- name: Prove exact approved nginx recovery before completing orchestration
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - ../../vars/webapp/promotion.yml
+  tasks:
+    - name: Require exact web deployment identities
+      ansible.builtin.assert:
+        that:
+          - webapp_candidate_sha is match('^[0-9a-f]{40}$')
+          - webapp_issue_number | int > 0
+          - webapp_pr_number | int > 0
+          - webapp_deployment_workflow_id | int > 0
+    - name: Read the actual production workflow
+      ansible.builtin.uri:
+        url: '{{ webapp_review_api }}/workflow_jobs/{{ webapp_deployment_workflow_id }}/'
+        url_username: '{{ webapp_review_username }}'
+        url_password: '{{ webapp_review_password }}'
+        force_basic_auth: true
+        validate_certs: true
+        return_content: true
+      register: webapp_production_workflow
+      no_log: true
+      check_mode: false
+    - name: Read the executed release checks approval and deployment
+      ansible.builtin.uri:
+        url: '{{ webapp_review_api }}/workflow_jobs/{{ webapp_deployment_workflow_id }}/workflow_nodes/?page_size=20'
+        url_username: '{{ webapp_review_username }}'
+        url_password: '{{ webapp_review_password }}'
+        force_basic_auth: true
+        validate_certs: true
+        return_content: true
+      register: webapp_production_nodes
+      no_log: true
+      check_mode: false
+    - name: Select the protected execution nodes
+      ansible.builtin.set_fact:
+        webapp_production_guards: >-
+          {{ webapp_production_nodes.json.results | selectattr('identifier', 'in', ['validate-release', 'recheck-release']) | list }}
+        webapp_production_approval: '{{ webapp_production_nodes.json.results | selectattr("identifier", "equalto", "production-approval") | list }}'
+        webapp_production_deploy: '{{ webapp_production_nodes.json.results | selectattr("identifier", "equalto", "deploy") | list }}'
+    - name: Require successful approval and deployment of the exact merged incident
+      ansible.builtin.assert:
+        that:
+          - webapp_production_workflow.json.status == 'successful'
+          - webapp_production_workflow.json.name == 'webapp_promote'
+          - webapp_production_workflow.json.scm_branch == webapp_candidate_sha
+          - (webapp_production_workflow.json.extra_vars | from_json).webapp_candidate_sha == webapp_candidate_sha
+          - (webapp_production_workflow.json.extra_vars | from_json).webapp_issue_number | int == webapp_issue_number | int
+          - (webapp_production_workflow.json.extra_vars | from_json).webapp_pr_number | int == webapp_pr_number | int
+          - webapp_production_nodes.json.count == 4
+          - webapp_production_guards | length == 2
+          - webapp_production_approval | length == 1
+          - webapp_production_deploy | length == 1
+          - webapp_production_approval[0].summary_fields.job.type == 'workflow_approval'
+          - webapp_production_approval[0].summary_fields.job.status == 'successful'
+          - webapp_production_deploy[0].summary_fields.job.status == 'successful'
+    - name: Read both executed trusted review gates
+      ansible.builtin.uri:
+        url: '{{ webapp_review_api }}/jobs/{{ item.job }}/'
+        url_username: '{{ webapp_review_username }}'
+        url_password: '{{ webapp_review_password }}'
+        force_basic_auth: true
+        validate_certs: true
+        return_content: true
+      loop: '{{ webapp_production_guards }}'
+      loop_control:
+        label: '{{ item.identifier }}'
+      register: webapp_production_guard_records
+      no_log: true
+      check_mode: false
+    - name: Require trusted successful gate executions around human approval
+      ansible.builtin.assert:
+        that:
+          - item.json.status == 'successful'
+          - item.json.summary_fields.job_template.name == 'webapp_review_release'
+          - item.json.summary_fields.project.name == 'demojam-ansible'
+          - item.json.artifacts.webapp_release_contract.source_revision == webapp_candidate_sha
+          - item.json.artifacts.webapp_release_contract.issue_number | int == webapp_issue_number | int
+          - item.json.artifacts.webapp_release_contract.pr_number | int == webapp_pr_number | int
+          - item.item.identifier != 'recheck-release' or (item.json.extra_vars | from_json).webapp_require_production_approval | bool
+      loop: '{{ webapp_production_guard_records.results }}'
+      loop_control:
+        label: '{{ item.item.identifier }}'
+    - name: Read the actual deployed collection job
+      ansible.builtin.uri:
+        url: '{{ webapp_review_api }}/jobs/{{ webapp_production_deploy[0].job }}/'
+        url_username: '{{ webapp_review_username }}'
+        url_password: '{{ webapp_review_password }}'
+        force_basic_auth: true
+        validate_certs: true
+        return_content: true
+      register: webapp_production_job
+      no_log: true
+      check_mode: false
+    - name: Select the independently checked release contract and host proof
+      ansible.builtin.set_fact:
+        webapp_production_contract: '{{ webapp_production_guard_records.results[0].json.artifacts.webapp_release_contract }}'
+        webapp_production_hosts: '{{ webapp_production_job.json.artifacts.webapp_deployment_hosts }}'
+    - name: Require pinned source and complete enforcing HTTP recovery
+      ansible.builtin.assert:
+        that:
+          - webapp_production_job.json.status == 'successful'
+          - webapp_production_job.json.summary_fields.job_template.name == 'webapp_deploy'
+          - webapp_production_job.json.summary_fields.project.name == 'webapp-collection'
+          - webapp_production_job.json.scm_revision == webapp_candidate_sha
+          - (webapp_production_job.json.extra_vars | from_json).webapp_candidate_sha == webapp_candidate_sha
+          - webapp_production_job.json.artifacts.webapp_release_contract == webapp_production_contract
+          - webapp_production_guard_records.results[1].json.artifacts.webapp_release_contract == webapp_production_contract
+          - webapp_production_contract.hosts | length > 0
+          - webapp_production_contract.hosts | sort == webapp_production_hosts.keys() | sort
+          - webapp_production_hosts.values() | map(attribute='source_revision') | unique | list == [webapp_candidate_sha]
+          - webapp_production_hosts.values() | map(attribute='selinux') | unique | list == ['enforcing']
+          - webapp_production_hosts.values() | map(attribute='http_status') | unique | list == [200]
+          - webapp_production_hosts.values() | map(attribute='passed') | unique | list == [true]
+    - name: Publish verified production recovery
+      ansible.builtin.set_stats:
+        aggregate: false
+        data:
+          webapp_deployment_verified: true
+          webapp_deployment_job_id: '{{ webapp_production_job.json.id }}'
+          webapp_release_contract: '{{ webapp_production_contract }}'

@@ -385,3 +385,20 @@ application service, and publishes verified containment with `fixed: false`.
 A later approved fixed release restores service through the existing deployment
 role. Only fixed versions with healthy business checks close either incident type.
 No generic OS patching, CME integration or automatic review scheduler is included.
+
+The base AAP dispatcher also installs `webapp-collection`, `webapp_review_release`,
+`webapp_deploy`, `webapp_verify_deployment` and the reusable `webapp_promote`
+workflow. These work in the web-only scenario without invoice configuration.
+The source project allows an exact launch revision. Only the deploy JT has the
+web SSH identity; trusted review/proof jobs use the separate deployment-review API
+credential and never receive guest SSH access.
+
+AO waits for a matching human-merged nginx incident PR, then launches
+`validate-release → production-approval → recheck-release → deploy` with its exact
+head SHA. Review gates verify merge/main ancestry through the web-specific feature
+gate and bind native workflow/approval identities to the same incident and source.
+Collection checks run before guest access; final proof requires every approved web
+host to report enforcing SELinux, HTTP 200 and the exact deployed source. The old
+`webapp_nginx` job remains baseline/setup automation. Independent operator RHEL
+validation remains required before human merge; no nginx machine acceptance runner
+is introduced here. The coding agent cannot merge or approve deployment.

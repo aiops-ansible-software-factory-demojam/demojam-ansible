@@ -148,3 +148,37 @@ demo_controller_templates:
     credentials: [demo-webapp-ssh]
     become_enabled: true
     ask_variables_on_launch: false
+  - name: webapp_review_release
+    organization: demo
+    project: demojam-ansible
+    inventory: demo-inventory
+    execution_environment: demo-aap-ee
+    playbook: playbooks/webapp/review-release.yml
+    credentials:
+      - demo-deployment-review-api
+    become_enabled: false
+    ask_variables_on_launch: true
+    allow_simultaneous: false
+  - name: webapp_deploy
+    organization: demo
+    project: webapp-collection
+    inventory: demo-inventory
+    execution_environment: demo-aap-ee
+    playbook: playbooks/promote_webapp.yml
+    credentials:
+      - demo-webapp-ssh
+    become_enabled: true
+    ask_variables_on_launch: true
+    allow_simultaneous: false
+    ask_scm_branch_on_launch: true
+  - name: webapp_verify_deployment
+    organization: demo
+    project: demojam-ansible
+    inventory: demo-inventory
+    execution_environment: demo-aap-ee
+    playbook: playbooks/webapp/verify-deployment.yml
+    credentials:
+      - demo-deployment-review-api
+    become_enabled: false
+    ask_variables_on_launch: true
+    allow_simultaneous: false
