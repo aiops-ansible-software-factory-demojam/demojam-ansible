@@ -249,6 +249,33 @@ invoice_platform_controller_templates:
       - demo-invoice-review-api
     ask_variables_on_launch: true
     allow_simultaneous: false
+  - name: invoice_prepare_release
+    organization: demo
+    project: demojam-ansible
+    inventory: demo-inventory
+    execution_environment: "{{ invoice_factory_ee_name }}"
+    playbook: playbooks/invoice/prepare-release.yml
+    credentials:
+      - demo-invoice-review-api
+      - demo-invoice-artifacts
+    ask_variables_on_launch: true
+    allow_simultaneous: false
+  - name: invoice_deploy
+    organization: demo
+    project: invoice-collection
+    inventory: demo-inventory
+    execution_environment: "{{ invoice_factory_ee_name }}"
+    playbook: playbooks/invoice-remediate.yml
+    credentials:
+      - demo-pythonapp-ssh
+      - demo-invoice-artifacts
+    become_enabled: true
+    extra_vars:
+      invoice_release_channel: lightwell
+      invoice_target_group: "{{ invoice_factory_material.profile.application.inventory_group }}"
+    ask_scm_branch_on_launch: true
+    ask_variables_on_launch: true
+    allow_simultaneous: false
 invoice_platform_controller_projects:
   - name: invoice-collection
     organization: demo
@@ -259,3 +286,31 @@ invoice_platform_controller_projects:
     scm_clean: true
     scm_update_on_launch: true
     wait: true
+invoice_platform_controller_workflows:
+  - name: invoice_promote
+    organization: demo
+    description: Review the tested source and artifact in launch variables before approving production.
+    inventory: demo-inventory
+    ask_scm_branch_on_launch: true
+    ask_variables_on_launch: true
+    allow_simultaneous: false
+    simplified_workflow_nodes:
+      - identifier: validate-release
+        unified_job_template: invoice_prepare_release
+        success_nodes:
+          - production-approval
+      - identifier: production-approval
+        approval_node:
+          name: Approve invoice production remediation
+          description: Approve only the tested commit and artifact recorded in this workflow run.
+          timeout: 1800
+        success_nodes:
+          - recheck-release
+      - identifier: recheck-release
+        unified_job_template: invoice_prepare_release
+        extra_data:
+          invoice_require_production_approval: true
+        success_nodes:
+          - deploy
+      - identifier: deploy
+        unified_job_template: invoice_deploy

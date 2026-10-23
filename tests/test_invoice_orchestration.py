@@ -15,19 +15,36 @@ class ProductionGateTests(unittest.TestCase):
     def setUp(self):
         self.sha = 'a' * 40
         self.wheel = 'b' * 64
+        self.contract = {'schema_version': 1, 'source_revision': self.sha, 'wheel_sha256': self.wheel,
+                         'validation_job_id': 7, 'material_sha256': 'c' * 64,
+                         'release_manifest_sha256': 'd' * 64, 'execution_environment': 'registry.test/ee@sha256:' + 'e' * 64}
         self.variables = {
-            'invoice_candidate_sha':self.sha, 'invoice_approved_wheel_sha256':self.wheel,
-            'invoice_production_workflow':{'json':{'status':'successful','name':'invoice-promote-'+self.sha+'-'+self.wheel}},
-            'invoice_production_nodes':{'json':{'count':2}},
-            'invoice_production_approval':[{'summary_fields':{'job':{'type':'workflow_approval','status':'successful'}}}],
-            'invoice_production_deploy':[{'summary_fields':{'job':{'status':'successful'}}}],
-            'invoice_production_job':{'json':{'status':'successful','scm_revision':self.sha,'artifacts':{
-                'invoice_release_evidence':{'passed':True,'release':{'wheel_sha256':self.wheel}}}}},
+            'invoice_candidate_sha': self.sha, 'invoice_approved_wheel_sha256': self.wheel,
+            'invoice_validation_job_id': 7, 'invoice_production_contract': self.contract,
+            'invoice_production_workflow': {'json': {'status': 'successful', 'name': 'invoice_promote', 'scm_branch': self.sha}},
+            'invoice_production_nodes': {'json': {'count': 4}},
+            'invoice_production_guards': [{'summary_fields': {'job': {'status': 'successful'}}}] * 2,
+            'invoice_production_approval': [{'summary_fields': {'job': {'type': 'workflow_approval', 'status': 'successful'}}}],
+            'invoice_production_deploy': [{'summary_fields': {'job': {'status': 'successful'}}}],
+            'invoice_production_ee': {'json': {'image': self.contract['execution_environment']}},
+            'invoice_production_job': {'json': {'status': 'successful', 'scm_revision': self.sha,
+                'summary_fields': {'job_template': {'name': 'invoice_deploy'}, 'project': {'name': 'invoice-collection'}},
+                'extra_vars': json.dumps({'invoice_release_contract': self.contract}),
+                'artifacts': {'invoice_release_contract': self.contract,
+                    'invoice_release_manifest_sha256': self.contract['release_manifest_sha256'],
+                    'invoice_release_evidence': {'passed': True, 'release': {'wheel_sha256': self.wheel}}}}},
         }
+        self.variables['invoice_production_guard_records'] = {'results': [
+            {'item': {'identifier': identifier}, 'json': {'status': 'successful',
+             'summary_fields': {'job_template': {'name': 'invoice_prepare_release'}, 'project': {'name': 'demojam-ansible'}},
+             'extra_vars': json.dumps({'invoice_require_production_approval': identifier == 'recheck-release'}),
+             'artifacts': {'invoice_release_contract': self.contract}}}
+            for identifier in ['validate-release', 'recheck-release']]}
         tasks = yaml.safe_load((ROOT/'playbooks/invoice/verify-deployment.yml').read_text())[0]['tasks']
         self.tasks = [t for t in tasks if t['name'] in [
             'Require successful approval and deployment in the exact release workflow',
-            'Require execution of the independently tested artifact and source']]
+            'Require execution of the independently tested artifact and source',
+            'Require trusted checks of this exact contract on both sides of approval']]
 
     def check(self, variables, passed):
         with tempfile.TemporaryDirectory() as tmp:
@@ -63,6 +80,23 @@ class ProductionGateTests(unittest.TestCase):
     def test_missing_approval_or_unexpected_workflow_graph_fails(self):
         self.variables['invoice_production_nodes']['json']['count']=3
         self.check(self.variables,False)
+    def test_replaced_release_gate_or_missing_approval_recheck_is_rejected(self):
+        for field in ['template', 'recheck']:
+            v = copy.deepcopy(self.variables)
+            record = v['invoice_production_guard_records']['results'][1]['json']
+            if field == 'template': record['summary_fields']['job_template']['name'] = 'other-job'
+            if field == 'recheck': record['extra_vars'] = json.dumps({'invoice_require_production_approval': False})
+            self.check(v, False)
+
+    def test_changed_contract_validation_or_execution_image_fails(self):
+        for field in ['validation', 'material', 'image', 'guard']:
+            with self.subTest(field=field):
+                v = copy.deepcopy(self.variables)
+                if field == 'validation': v['invoice_validation_job_id'] = 99
+                if field == 'material': v['invoice_production_job']['json']['artifacts']['invoice_release_contract']['material_sha256'] = 'f' * 64
+                if field == 'image': v['invoice_production_ee']['json']['image'] = 'registry.test/other'
+                if field == 'guard': v['invoice_production_guards'][0]['summary_fields']['job']['status'] = 'failed'
+                self.check(v, False)
 
 
 class ValidationStatusTests(unittest.TestCase):

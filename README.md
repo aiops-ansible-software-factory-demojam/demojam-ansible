@@ -330,7 +330,7 @@ An upgrade job, `webapp_retire_legacy_invoice`, stops/disables only a former inv
 ## Continuous invoice orchestration
 
 The existing invoice EDA entry now feeds one AO execution through PR discovery,
-independent validation, human merge, immutable release configuration, human AAP
+independent validation, human merge, immutable launch contracts, human AAP
 approval, deployment proof and application verification. `invoice_validation_status`
 uses a dedicated credential carrying the configured Controller API identity and
 Forgejo status writer, without production SSH or test AWS credentials. It reads
@@ -339,8 +339,30 @@ trusted validation evidence before publishing a required check.
 and actual job source/artifact before the application check can close the incident.
 The trusted project remains outside the coding agent's write permissions.
 
-Release configuration requires `invoice_issue_number` and `invoice_pr_number` as
+Release preparation requires `invoice_issue_number` and `invoice_pr_number` as
 well as the exact `invoice_candidate_sha` and `invoice_validation_job_id`. The
 feature gate checks that the matching incident branch was human-merged and that
 its tested head is contained in main. Existing manual promotion supplies these
 identities automatically. No playbook approves or merges on the operator's behalf.
+
+
+Promotion resources are configured once: the existing `invoice-collection`
+project, shared artifact credential, `invoice_deploy` JT and `invoice_promote`
+workflow. No project, credential, JT or workflow is generated per release.
+`invoice_prepare_release` checks human merge and independent validation, returning
+a public release contract with source, validation/incident IDs, artifact and
+material hashes, release-manifest hash and immutable execution image.
+
+AO launches `invoice_promote` with that contract and the exact tested SCM commit.
+The native AAP graph is `validate-release → production-approval → recheck-release
+→ deploy`. Both release checks use trusted controller content without production
+SSH. The post-approval check verifies this execution's actual human decision.
+The collection rechecks source, lock, target group and material before guest
+connection, closing the shared-credential drift window. The signing key remains
+independently pinned. Post-deployment proof checks both guard jobs, approval,
+actual source/image and emitted release evidence before AO closes the incident.
+
+Older acceptance records without `material_sha256` cannot authorize this path;
+run independent validation again. Old per-release objects are not deleted during
+configuration, so historical or running executions remain available. Remove them
+separately after confirming no execution still uses them.

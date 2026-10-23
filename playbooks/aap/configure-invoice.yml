@@ -45,104 +45,13 @@
             var: controller_templates
             tags:
               - controller_templates
+          - role: controller_workflow_job_templates
+            var: controller_workflows
+            tags:
+              - controller_workflows
         controller_credential_types: "{{ invoice_platform_controller_credential_types }}"
         controller_credentials: "{{ invoice_platform_controller_credentials }}"
         controller_execution_environments: "{{ invoice_platform_controller_execution_environments }}"
         controller_templates: "{{ invoice_platform_controller_templates }}"
         controller_projects: "{{ invoice_platform_controller_projects }}"
-    - name: Configure a validated production release
-      when: invoice_candidate_sha is defined
-      block:
-        - name: Require an exact commit and an independent validation job
-          ansible.builtin.assert:
-            that:
-              - invoice_candidate_sha is match('^[0-9a-f]{40}$')
-              - invoice_validation_job_id | default(0) | int > 0
-              - invoice_pr_number | default(0) | int > 0
-              - invoice_issue_number | default(0) | int > 0
-        - name: Require human merge of the unchanged incident PR contained in main
-          ansible.builtin.uri:
-            url: >-
-              http://backstage-feature-gate.automation-orchestrator.svc:8080/invoice/pr?issue_number={{ invoice_issue_number
-              }}&pr_number={{ invoice_pr_number }}&head_sha={{ invoice_candidate_sha }}&require_merged=true
-            return_content: true
-            status_code: 200
-          register: invoice_merged_pr
-        - name: Refuse promotion before human merge
-          ansible.builtin.assert:
-            that:
-              - invoice_merged_pr.json.merged | bool
-              - invoice_merged_pr.json.head_sha == invoice_candidate_sha
-        - name: Read independent AAP validation evidence
-          ansible.builtin.uri:
-            url: "{{ aap_hostname }}/api/controller/v2/jobs/{{ invoice_validation_job_id }}/"
-            url_username: "{{ aap_username }}"
-            url_password: "{{ aap_password }}"
-            force_basic_auth: true
-            validate_certs: true
-            return_content: true
-          register: invoice_validation_record
-          no_log: true
-        - name: Read the execution environment used by validation
-          ansible.builtin.uri:
-            url: >-
-              {{ aap_hostname }}/api/controller/v2/execution_environments/{{ invoice_validation_record.json.execution_environment
-              }}/
-            url_username: "{{ aap_username }}"
-            url_password: "{{ aap_password }}"
-            force_basic_auth: true
-            validate_certs: true
-            return_content: true
-          register: invoice_validation_ee
-          no_log: true
-        - name: Bind promotion to the successfully tested source and artifact
-          ansible.builtin.assert:
-            that:
-              - invoice_validation_record.json.status == 'successful'
-              - invoice_validation_record.json.summary_fields.job_template.name == 'invoice_validate'
-              - invoice_validation_record.json.artifacts.invoice_validation.passed | bool
-              - invoice_validation_record.json.artifacts.invoice_validation.source_revision == invoice_candidate_sha
-              - invoice_validation_record.json.artifacts.invoice_validation.acceptance_suite == 'trusted-invoice-v1'
-              - invoice_validation_record.json.artifacts.invoice_validation.profile_sha256 == (invoice_factory_material.profile
-                | to_json(sort_keys=true) | hash('sha256'))
-              - invoice_validation_record.json.artifacts.invoice_validation.wheel_sha256 == invoice_factory_material.lightwell.sha256
-              - invoice_validation_ee.json.image == invoice_factory_ee
-        - name: Load release-specific AAP definitions
-          ansible.builtin.include_vars: ../../vars/invoice/release.yml
-        - name: Apply release AAP resource definitions
-          ansible.builtin.include_role:
-            name: infra.aap_configuration.dispatch
-          vars:
-            aap_configuration_secure_logging: true
-            assign_default_ee_to_org: false
-            gateway_configuration_dispatcher_roles: []
-            hub_configuration_dispatcher_roles: []
-            controller_configuration_dispatcher_roles:
-              - role: controller_credentials
-                var: controller_credentials
-                tags:
-                  - controller_credentials
-              - role: controller_projects
-                var: controller_projects
-                tags:
-                  - controller_projects
-              - role: controller_job_templates
-                var: controller_templates
-                tags:
-                  - controller_templates
-              - role: controller_workflow_job_templates
-                var: controller_workflows
-                tags:
-                  - controller_workflows
-            controller_projects: "{{ invoice_release_controller_projects }}"
-            controller_credentials: "{{ invoice_release_controller_credentials }}"
-            controller_templates: "{{ invoice_release_controller_templates }}"
-            controller_workflows: "{{ invoice_release_controller_workflows }}"
-        - name: Expose the immutable approval workflow to AO
-          ansible.builtin.set_stats:
-            aggregate: false
-            data:
-              invoice_promotion_workflow: >-
-                invoice-promote-{{ invoice_candidate_sha }}-{{ invoice_factory_material.lightwell.sha256 }}
-              invoice_promotion_source_revision: "{{ invoice_candidate_sha }}"
-              invoice_promotion_validation_job: "{{ invoice_validation_job_id }}"
+        controller_workflows: "{{ invoice_platform_controller_workflows }}"

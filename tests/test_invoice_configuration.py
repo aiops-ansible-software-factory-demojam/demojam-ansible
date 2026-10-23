@@ -41,7 +41,6 @@ class InvoiceCredentialTests(unittest.TestCase):
         play = yaml.load((ROOT / "playbooks/aap/configure-invoice.yml").read_text(), Loader=InventoryLoader)[0]
         self.tasks = play["tasks"]
         self.platform = yaml.load((ROOT / "vars/invoice/platform.yml").read_text(), Loader=InventoryLoader)
-        self.release = yaml.load((ROOT / "vars/invoice/release.yml").read_text(), Loader=InventoryLoader)
 
     def test_artifact_credential_contains_json_text(self):
         credential = next(c for c in self.platform["invoice_platform_controller_credentials"] if c["name"] == "demo-invoice-artifacts")
@@ -58,35 +57,44 @@ class InvoiceCredentialTests(unittest.TestCase):
         self.assertEqual(inputs["account_id"], "123456789012")
         self.assertEqual(inputs["root_volume_size"], "30")
 
-    def test_release_snapshot_uses_the_same_json_boundary(self):
-        credential = self.release["invoice_release_controller_credentials"][0]
-        material = self.templater.template(credential["inputs"]["material"])
-        self.assertIsInstance(material, str)
-        self.assertEqual(json.loads(material), self.material)
+    def test_release_resources_are_reused_instead_of_generated_per_commit(self):
+        self.assertFalse((ROOT / 'vars/invoice/release.yml').exists())
+        names = [t['name'] for t in self.platform['invoice_platform_controller_templates']]
+        self.assertEqual(names.count('invoice_deploy'), 1)
+        self.assertEqual(names.count('invoice_prepare_release'), 1)
+        self.assertEqual(len(self.platform['invoice_platform_controller_projects']), 1)
+        self.assertEqual(len(self.platform['invoice_platform_controller_workflows']), 1)
+        self.assertFalse(any('invoice_candidate_sha' in n for n in names))
 
-    def test_only_approved_workflow_path_reaches_pinned_deployment(self):
-        workflow = self.release["invoice_release_controller_workflows"][0]
-        nodes = workflow["simplified_workflow_nodes"]
-        approval = next(n for n in nodes if "approval_node" in n)
-        self.assertEqual(approval["identifier"], "production-approval")
-        self.assertEqual(approval["approval_node"]["timeout"], 1800)
-        self.assertEqual(approval["success_nodes"], ["deploy"])
-        self.assertFalse(approval.get("always_nodes"))
-        self.assertFalse(approval.get("failure_nodes"))
-        self.assertEqual(len(nodes), 2)
-        deployment = self.release["invoice_release_controller_templates"][0]
-        self.assertFalse(deployment["ask_scm_branch_on_launch"])
-        self.assertFalse(deployment["ask_variables_on_launch"])
-        project = self.release["invoice_release_controller_projects"][0]
-        self.assertEqual(project["scm_branch"], "{{ invoice_candidate_sha }}")
-        self.assertFalse(project["allow_override"])
+    def test_only_approved_rechecked_workflow_path_reaches_deployment(self):
+        workflow = self.platform['invoice_platform_controller_workflows'][0]
+        self.assertEqual(workflow['name'], 'invoice_promote')
+        self.assertTrue(workflow['ask_variables_on_launch'])
+        self.assertTrue(workflow['ask_scm_branch_on_launch'])
+        self.assertFalse(workflow['allow_simultaneous'])
+        nodes = {n['identifier']: n for n in workflow['simplified_workflow_nodes']}
+        self.assertEqual(len(nodes), 4)
+        self.assertEqual(nodes['validate-release']['success_nodes'], ['production-approval'])
+        self.assertEqual(nodes['production-approval']['approval_node']['timeout'], 1800)
+        self.assertEqual(nodes['production-approval']['success_nodes'], ['recheck-release'])
+        self.assertEqual(nodes['recheck-release']['success_nodes'], ['deploy'])
+        self.assertTrue(nodes['recheck-release']['extra_data']['invoice_require_production_approval'])
+        for node in nodes.values():
+            self.assertFalse(node.get('always_nodes'))
+            self.assertFalse(node.get('failure_nodes'))
+        deployment = next(t for t in self.platform['invoice_platform_controller_templates'] if t['name'] == 'invoice_deploy')
+        self.assertTrue(deployment['ask_scm_branch_on_launch'])
+        self.assertTrue(deployment['ask_variables_on_launch'])
+        self.assertEqual(deployment['project'], 'invoice-collection')
+        self.assertNotIn('demo-invoice-review-api', deployment['credentials'])
+        self.assertTrue(self.platform['invoice_platform_controller_projects'][0]['allow_override'])
 
     def test_dispatch_only_owns_invoice_resources_in_dependency_order(self):
         dispatch = next(t for t in self.tasks if "ansible.builtin.include_role" in t)
         self.assertEqual(dispatch["ansible.builtin.include_role"]["name"], "infra.aap_configuration.dispatch")
         roles = dispatch["vars"]["controller_configuration_dispatcher_roles"]
         self.assertEqual([r["var"] for r in roles], ["controller_credential_types", "controller_credentials",
-                         "controller_execution_environments", "controller_projects", "controller_templates"])
+                         "controller_execution_environments", "controller_projects", "controller_templates", "controller_workflows"])
         self.assertEqual(dispatch["vars"]["gateway_configuration_dispatcher_roles"], [])
         self.assertEqual(dispatch["vars"]["hub_configuration_dispatcher_roles"], [])
 

@@ -208,6 +208,9 @@
                 source_revision: "{{ invoice_checkout.after }}"
                 wheel_sha256: "{{ invoice_validation_material.lightwell.sha256 }}"
                 collection_sha256: "{{ invoice_collection_digest.stat.checksum }}"
+                material_sha256: >-
+                  {{ {'profile': invoice_validation_material.profile, 'lightwell': invoice_validation_material.lightwell,
+                  'signing_key_sha256': invoice_validation_material.signing_key_sha256} | to_json(sort_keys=true) | hash('sha256') }}
                 backend: aws
                 scenario: "{{ invoice_validation_material.profile.validation.scenario }}"
                 release_manifest_sha256: "{{ lightwell_release_sha256 }}"
