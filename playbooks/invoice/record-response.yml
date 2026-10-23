@@ -1,0 +1,80 @@
+---
+- name: Record deferred and manual CVE responses without dispatching a coding agent
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - ../../vars/invoice/orchestration.yml
+  vars:
+    invoice_response_material: '{{ lookup("ansible.builtin.file", lookup("ansible.builtin.env", "INVOICE_MATERIAL_FILE")) | from_json }}'
+    invoice_issue_url: 'http://forgejo.forgejo.svc.cluster.local:3000/api/v1/repos/{{ invoice_response_material.profile.application.repository }}/issues'
+  tasks:
+    - name: Read the independently decided response
+      ansible.builtin.import_tasks: tasks/read-response.yml
+    - name: Require a configured application repository
+      ansible.builtin.assert:
+        that: invoice_response_material.profile.application.repository is match('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')
+    - name: Initialize bounded issue reconciliation
+      ansible.builtin.set_fact:
+        remediation_issues: []
+        remediation_more_pages: true
+        invoice_response_marker: '<!-- security-response:{{ invoice_trusted_response.incident_key }} -->'
+    - name: Read complete response ticket history
+      ansible.builtin.include_tasks: tasks/issue-page.yml
+      loop: '{{ range(1, 101) | list }}'
+      loop_control:
+        loop_var: remediation_page
+    - name: Reject truncated ticket history
+      ansible.builtin.assert:
+        that: not remediation_more_pages | bool
+    - name: Match an open security review for this incident
+      ansible.builtin.set_fact:
+        invoice_response_tickets: >-
+          {{ remediation_issues | selectattr('body', 'search', invoice_response_marker)
+          | selectattr('state', 'equalto', 'open') | list }}
+    - name: Require a single review record
+      ansible.builtin.assert:
+        that: invoice_response_tickets | length <= 1
+    - name: Preserve the original review deadline on an existing ticket
+      ansible.builtin.set_fact:
+        invoice_response_deadlines: >-
+          {{ (invoice_response_tickets[0].body if invoice_response_tickets | length == 1 else '')
+          | regex_findall('(?m)^Review due \(UTC\): (.+)$') }}
+    - name: Select the anchored review deadline
+      ansible.builtin.set_fact:
+        invoice_response_review_due: >-
+          {{ invoice_response_deadlines[0] if invoice_response_deadlines | length > 0 else
+          ('%Y-%m-%dT%H:%M:%SZ' | strftime((now(utc=true).strftime('%s') | int) +
+          (invoice_trusted_response.review_in_days | int * 86400), utc=true)) }}
+    - name: Retain the response and its review deadline
+      when: invoice_trusted_response.affected | bool or invoice_trusted_response.route == 'manual_review'
+      ansible.builtin.uri:
+        url: '{{ invoice_issue_url }}{{ "/" ~ invoice_response_tickets[0].number if invoice_response_tickets | length == 1 else "" }}'
+        method: '{{ "PATCH" if invoice_response_tickets | length == 1 else "POST" }}'
+        headers:
+          Authorization: 'token {{ invoice_repository_token }}'
+        body_format: json
+        body:
+          title: 'Security response: {{ invoice_response_material.profile.application.id }} / {{ invoice_trusted_response.route }}'
+          body: |
+            {{ invoice_response_marker }}
+            This is a security response record, not a release-authoring instruction.
+            Route: {{ invoice_trusted_response.route }}
+            Reason: {{ invoice_trusted_response.reason }}
+            Review within {{ invoice_trusted_response.review_in_days }} days of this observation.
+            Review due (UTC): {{ invoice_response_review_due }}
+            Temporary containment intentionally interrupts service and does not fix the dependency.
+            Approval, execution and verification are recorded separately in AAP.
+            Keep this ticket open until actual remediation or an explicit security review.
+
+            {{ invoice_trusted_response | to_nice_json }}
+        status_code: [200, 201]
+        return_content: true
+      register: invoice_response_ticket
+      no_log: true
+    - name: Publish the auditable response without closing an unresolved vulnerability
+      ansible.builtin.set_stats:
+        aggregate: false
+        data:
+          invoice_response: '{{ invoice_trusted_response }}'
+          invoice_response_ticket: '{{ invoice_response_ticket.json.number | default(0) }}'

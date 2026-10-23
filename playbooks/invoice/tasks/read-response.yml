@@ -1,0 +1,35 @@
+---
+- name: Require the independently executed router identity
+  ansible.builtin.assert:
+    that: invoice_router_job_id | int > 0
+- name: Read the actual CVE routing execution
+  ansible.builtin.uri:
+    url: '{{ invoice_review_api }}/jobs/{{ invoice_router_job_id }}/'
+    url_username: '{{ invoice_review_username }}'
+    url_password: '{{ invoice_review_password }}'
+    force_basic_auth: true
+    validate_certs: true
+    return_content: true
+  register: invoice_router_record
+  no_log: true
+  check_mode: false
+- name: Require a trusted routing receipt for the current application policy
+  ansible.builtin.assert:
+    that:
+      - invoice_router_record.json.status == 'successful'
+      - invoice_router_record.json.summary_fields.job_template.name == 'invoice_route'
+      - invoice_router_record.json.summary_fields.project.name == 'demojam-ansible'
+      - invoice_router_record.json.artifacts.invoice_response.schema_version == 1
+      - invoice_router_record.json.artifacts.invoice_response.route in ['app_patch', 'contain', 'log_only', 'manual_review']
+      - invoice_router_record.json.artifacts.invoice_response.profile_sha256 == (invoice_response_material.profile | to_json(sort_keys=true) | hash('sha256'))
+- name: Select the trusted response receipt
+  ansible.builtin.set_fact:
+    invoice_trusted_response: '{{ invoice_router_record.json.artifacts.invoice_response }}'
+    invoice_assessment_job_id: '{{ invoice_router_record.json.artifacts.invoice_response.assessment_job_id }}'
+- name: Recheck the originating observations
+  ansible.builtin.import_tasks: read-assessment.yml
+- name: Require the response to cover the independently assessed incident and hosts
+  ansible.builtin.assert:
+    that:
+      - invoice_trusted_response.incident_key == invoice_routing_finding.incident_key
+      - invoice_trusted_response.hosts | sort == invoice_routing_finding.hosts | sort

@@ -1,0 +1,29 @@
+---
+controller_workflows:
+  - name: webapp_promote
+    description: Approve deployment of the exact human-merged nginx incident fix.
+    organization: demo
+    inventory: demo-inventory
+    ask_scm_branch_on_launch: true
+    ask_variables_on_launch: true
+    allow_simultaneous: false
+    simplified_workflow_nodes:
+      - identifier: validate-release
+        unified_job_template: webapp_review_release
+        success_nodes:
+          - production-approval
+      - identifier: production-approval
+        approval_node:
+          name: Approve nginx production recovery
+          description: Deploy the exact merged incident commit to webapps and require SELinux enforcing plus HTTP recovery.
+          timeout: 1800
+        success_nodes:
+          - recheck-release
+      - identifier: recheck-release
+        unified_job_template: webapp_review_release
+        extra_data:
+          webapp_require_production_approval: true
+        success_nodes:
+          - deploy
+      - identifier: deploy
+        unified_job_template: webapp_deploy

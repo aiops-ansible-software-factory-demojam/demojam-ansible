@@ -55,9 +55,9 @@ class IncidentTests(unittest.TestCase):
         self.addCleanup(self.server.server_close)
         self.addCleanup(self.server.shutdown)
 
-    def run_reconciliation(self, affected=True, fix=True, state='affected', success=True):
+    def run_reconciliation(self, affected=True, fix=True, state='affected', success=True, business_passed=True):
         finding = {'schema_version': 1, 'incident_key': KEY, 'affected': affected, 'fix_available': fix,
-                   'assessment_state': state, 'application': 'fixture-app', 'environment': 'test',
+                   'assessment_state': state, 'business_passed': business_passed, 'application': 'fixture-app', 'environment': 'test',
                    'application_profile': {'repository': 'owner/app', 'release_manifest': 'releases/app.json'},
                    'package': 'example-package', 'installed_version': '1.1' if state == 'fixed' else '1.0', 'advisories': ['TEST-1'],
                    'advisory_evidence': [{'id': 'TEST-1', 'fixed_versions': ['1.1']}],
@@ -94,6 +94,17 @@ class IncidentTests(unittest.TestCase):
         self.issues = [{'number': 1, 'state': 'open', 'body': MARKER, 'html_url': 'https://fixture.test/1'}]
         self.run_reconciliation(affected=False, fix=False, state='fixed')
         self.assertIn(('PATCH', {'state': 'closed'}), self.requests)
+
+    def test_verified_fix_also_closes_the_temporary_response_ticket(self):
+        self.issues = [{'number': 1, 'state': 'open', 'body': MARKER},
+                       {'number': 2, 'state': 'open', 'body': '<!-- security-response:' + KEY + ' -->'}]
+        self.run_reconciliation(affected=False, fix=False, state='fixed')
+        self.assertEqual(len([r for r in self.requests if r == ('PATCH', {'state': 'closed'})]), 2)
+
+    def test_stopped_or_unhealthy_fixed_service_does_not_close_incident(self):
+        self.issues = [{'number': 1, 'state': 'open', 'body': MARKER}]
+        self.run_reconciliation(affected=False, fix=False, state='fixed', business_passed=False)
+        self.assertFalse(any(r[0] == 'PATCH' for r in self.requests))
 
     def test_unknown_version_does_not_resolve_incident(self):
         self.issues = [{'number': 1, 'state': 'open', 'body': MARKER, 'html_url': 'https://fixture.test/1'}]

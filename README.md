@@ -366,3 +366,39 @@ Older acceptance records without `material_sha256` cannot authorize this path;
 run independent validation again. Old per-release objects are not deleted during
 configuration, so historical or running executions remain available. Remove them
 separately after confirming no execution still uses them.
+
+CVE response routing reads actual successful `invoice_check` and `invoice_discover`
+job receipts through `invoice_route`, validating template/project identity, complete
+host evidence and current profile hashes. The four outcomes are `app_patch`,
+`contain`, `log_only` and `manual_review`. A compatible approved Lightwell fix keeps
+the existing authoring and promotion flow. Unknown evidence or unsupported ecosystems
+require manual review; lower-severity no-fix findings retain a deferred review.
+API/discovery errors stop rather than masquerading as a missing fix.
+
+`invoice_record_response` maintains separate deduplicated security tickets with an
+anchored review deadline. Their marker cannot trigger the coding agent. Temporary
+containment uses a separate `invoice_contain` approval workflow: trusted receipt
+check → human approval → trusted recheck → scoped collection service shutdown.
+The request pins the configured application SCM revision, profile and exact hosts.
+The collection rechecks live dependency identity, stops/disables only the configured
+application service, and publishes verified containment with `fixed: false`.
+A later approved fixed release restores service through the existing deployment
+role. Only fixed versions with healthy business checks close either incident type.
+No generic OS patching, CME integration or automatic review scheduler is included.
+
+The base AAP dispatcher also installs `webapp-collection`, `webapp_review_release`,
+`webapp_deploy`, `webapp_verify_deployment` and the reusable `webapp_promote`
+workflow. These work in the web-only scenario without invoice configuration.
+The source project allows an exact launch revision. Only the deploy JT has the
+web SSH identity; trusted review/proof jobs use the separate deployment-review API
+credential and never receive guest SSH access.
+
+AO waits for a matching human-merged nginx incident PR, then launches
+`validate-release → production-approval → recheck-release → deploy` with its exact
+head SHA. Review gates verify merge/main ancestry through the web-specific feature
+gate and bind native workflow/approval identities to the same incident and source.
+Collection checks run before guest access; final proof requires every approved web
+host to report enforcing SELinux, HTTP 200 and the exact deployed source. The old
+`webapp_nginx` job remains baseline/setup automation. Independent operator RHEL
+validation remains required before human merge; no nginx machine acceptance runner
+is introduced here. The coding agent cannot merge or approve deployment.
