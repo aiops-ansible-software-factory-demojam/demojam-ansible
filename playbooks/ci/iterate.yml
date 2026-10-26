@@ -61,7 +61,7 @@
       ansible.builtin.uri:
         url: '{{ ci_gate }}'
       register: ci_latest
-    - name: Resume the same idle author when the latest published head failed CI
+    - name: Return failed CI to the existing author without interrupting active work
       when: ci_latest.json.ci_failed | bool
       block:
         - name: Authenticate for an author feedback callback
@@ -89,8 +89,14 @@
               - ci_author.json.id == ci_author_session
               - ci_author.json.agent_name == 'automation-developer'
               - ci_author.json.title == ('Webapp outage issue ' if ci_web else 'Invoice remediation issue ') ~ (ci_issue_number | string)
-        - name: Continue the same PR after failed CI without interrupting active work
-          when: ci_author.json.status == 'idle'
+        - name: Identify source-bound feedback already queued for an active author
+          ansible.builtin.set_fact:
+            ci_feedback_marker: '<!-- demo-ci-feedback sha={{ ci_latest.json.head_sha }} -->'
+        - name: Queue failure feedback once for active work or resume the same idle author
+          when: >-
+            ci_author.json.status == 'idle' or
+            (ci_author.json.status == 'running' and
+            ci_feedback_marker not in (ci_author.json['items'] | default([]) | to_json))
           ansible.builtin.uri:
             url: '{{ ci_agent_api }}/v1/sessions/{{ ci_author_session }}/events'
             method: POST
@@ -105,7 +111,7 @@
                 content:
                   - type: input_text
                     text: >-
-                      Independent CI failed for {{ ci_latest.json.head_sha }} on your existing incident PR.
+                      {{ ci_feedback_marker }} Independent CI failed for {{ ci_latest.json.head_sha }} on your existing incident PR.
                       Continue this same task, branch and PR. Run demo-goldenpath --repository {{ ci_repository }}
                       ci {{ ci_issue_number }} --wait and read the trusted reviewer diagnostics. Fix the cause,
                       rerun local checks after your final edit, commit and push, then wait for all independent

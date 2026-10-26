@@ -33,7 +33,8 @@ class IterationTests(unittest.TestCase):
                     jid=int(self.path.rstrip('/').split('/')[-1]);self.send(fixture['jobs'][jid])
                 elif '/v1/sessions/'in self.path:
                     self.send({'id':session,'agent_name':'automation-developer','title':'Invoice remediation issue 1',
-                        'status':'running'if fixture['case']=='active'else'idle'})
+                        'status':'running'if fixture['case']in ['active','already-notified']else'idle',
+                        'items':[{'type':'message','data':{'role':'user','content':'<!-- demo-ci-feedback sha='+('a'*40)+' -->'}}]if fixture['case']=='already-notified'else[]})
                 else:raise AssertionError(self.path)
             def do_POST(self):
                 raw=self.rfile.read(int(self.headers['Content-Length']))
@@ -49,7 +50,7 @@ class IterationTests(unittest.TestCase):
             def log_message(self,*args):pass
         server=ThreadingHTTPServer(('127.0.0.1',0),Handler);worker=threading.Thread(target=server.serve_forever,daemon=True);worker.start()
         try:
-            for case in ['no-pr','pending','failure','active','repaired','green','existing-failure']:
+            for case in ['no-pr','pending','failure','active','already-notified','repaired','green','existing-failure']:
                 fixture.clear();fixture.update(case=case,jobs={},launches=[],events=[],published=False)
                 url=f'http://127.0.0.1:{server.server_port}'
                 values={'ci_repository':'demo-owner/ansible-collection-demo.pythonapp','ci_issue_number':1,'ci_author_session':session,
@@ -62,9 +63,11 @@ class IterationTests(unittest.TestCase):
                     expected=[]if case in ['no-pr','pending','green','existing-failure']else[10,20,10]
                     self.assertEqual([x[0]for x in fixture['launches']],expected)
                     if expected:self.assertEqual(int(fixture['launches'][-1][1]['extra_vars']['ci_validation_job_id']),2)
-                    self.assertEqual(len(fixture['events']),1 if case in ['failure','existing-failure']else 0)
+                    self.assertEqual(len(fixture['events']),1 if case in ['failure','active','existing-failure']else 0)
                     if fixture['events']:
                         self.assertIn(session,fixture['events'][0][0]);self.assertIn('same task',fixture['events'][0][1]['data']['content'][0]['text'])
+                        self.assertEqual(fixture['events'][0][1]['type'],'message')
+                        self.assertIn('demo-ci-feedback sha=',fixture['events'][0][1]['data']['content'][0]['text'])
         finally:server.shutdown();server.server_close();worker.join()
 
 

@@ -409,8 +409,8 @@ AO keeps each authoring task open until the current PR head passes independent
 CI. After publishing, the agent uses `demo-goldenpath ci <issue> --wait`; pending
 exits 75, failures exit 1 with trusted diagnostics, and only exact-head success
 exits 0. Failed checks return to the same session, branch and PR. New commits
-invalidate old success. AO avoids interrupting an active author and resumes an
-idle author after a failed check. Human review/merge and native production
+invalidate old success. AO queues source-bound failure feedback once for an active author and resumes
+an idle author after a failed check; it never sends an interrupt. Human review/merge and native production
 approval still happen after green CI.
 
 `webapp_validate` runs lint, build, all unit tests, every Molecule scenario, and
@@ -420,7 +420,8 @@ role from a raw AAP checkout without installing the candidate collection first.
 Application unit tests use a separate Python environment with the hash-verified
 baseline wheel. Test subprocesses never inherit the reviewer or AAP API token.
 `demo_ci_iteration` launches allowlisted validation/publisher jobs using the Controller API
-and resumes only the existing idle author. It never executes candidate code.
+and sends source-bound feedback only to the existing author: queued once per failed
+commit while active, or resumed while idle. It never interrupts or executes candidate code.
 `demo_ci_publish` alone receives the reviewer credential, verifies job/project/SHA
 provenance, and posts a required status and bounded, sanitized PR diagnostics.
 A failed CI verdict permits another authoring attempt, never promotion. AO uses
