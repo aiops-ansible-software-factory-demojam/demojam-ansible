@@ -1,0 +1,41 @@
+---
+- name: Require an allowlisted independent CI child job
+  ansible.builtin.assert:
+    that: ci_child_template in ['webapp_validate', 'invoice_validate', 'demo_ci_publish']
+- name: Resolve the trusted CI template in the demo organization
+  ansible.builtin.uri:
+    url: '{{ ci_controller }}/job_templates/?name={{ ci_child_template }}&organization__name=demo'
+    url_username: '{{ ci_username }}'
+    url_password: '{{ ci_password }}'
+    force_basic_auth: true
+  register: ci_templates
+  no_log: true
+- name: Require exactly one trusted CI template
+  ansible.builtin.assert:
+    that:
+      - ci_templates.json.count == 1
+      - ci_templates.json.results[0].summary_fields.project.name == 'demojam-ansible'
+- name: Launch the child once with exact source variables
+  ansible.builtin.uri:
+    url: '{{ ci_controller }}/job_templates/{{ ci_templates.json.results[0].id }}/launch/'
+    method: POST
+    body_format: json
+    body:
+      extra_vars: '{{ ci_child_vars }}'
+    url_username: '{{ ci_username }}'
+    url_password: '{{ ci_password }}'
+    force_basic_auth: true
+    status_code: 201
+  register: ci_launch
+  no_log: true
+- name: Wait for this child without launching another job
+  ansible.builtin.uri:
+    url: '{{ ci_controller }}/jobs/{{ ci_launch.json.job }}/'
+    url_username: '{{ ci_username }}'
+    url_password: '{{ ci_password }}'
+    force_basic_auth: true
+  register: ci_child
+  until: ci_child.json.status in ['successful', 'failed', 'error', 'canceled']
+  retries: 720
+  delay: 10
+  no_log: true

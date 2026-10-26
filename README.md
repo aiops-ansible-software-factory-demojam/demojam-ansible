@@ -403,7 +403,37 @@ host to report enforcing SELinux, HTTP 200 and the exact deployed source. The ol
 validation remains required before human merge. The coding agent cannot merge or
 approve deployment.
 
-### Independent nginx regression validation
+### Independent CI and agent completion
+
+AO keeps each authoring task open until the current PR head passes independent
+CI. After publishing, the agent uses `demo-goldenpath ci <issue> --wait`; pending
+exits 75, failures exit 1 with trusted diagnostics, and only exact-head success
+exits 0. Failed checks return to the same session, branch and PR. New commits
+invalidate old success. AO avoids interrupting an active author and resumes an
+idle author after a failed check. Human review/merge and native production
+approval still happen after green CI.
+
+`webapp_validate` runs lint, build, all unit tests, every Molecule scenario, and
+trusted red/green/relabel recovery. `invoice_validate` runs all unit and Molecule
+tests plus trusted invoice acceptance. Its preflight resolves the actual release
+role from a raw AAP checkout without installing the candidate collection first.
+Application unit tests use a separate Python environment with the hash-verified
+baseline wheel. Test subprocesses never inherit the reviewer or AAP API token.
+`demo_ci_iteration` launches allowlisted validation/publisher jobs using the Controller API
+and resumes only the existing idle author. It never executes candidate code.
+`demo_ci_publish` alone receives the reviewer credential, verifies job/project/SHA
+provenance, and posts a required status and bounded, sanitized PR diagnostics.
+A failed CI verdict permits another authoring attempt, never promotion. AO uses
+a linear loop because this AO version retains skipped conditional branches
+between loop iterations. Retry decisions use ordinary Ansible conditions in
+the CI controller job. Version 2 receipts invalidate earlier incomplete checks.
+
+Bootstrap configures these jobs with a pinned test image and disposable AWS or
+CNV credentials. For an existing installation, publish the trusted controller
+content first and run `bash bootstrap/bootstrap.sh ci-configure` from GitOps.
+Published workflow changes apply to new executions; do not rewrite past results.
+
+### Manual independent nginx regression diagnostics
 
 Each fix must change `extensions/molecule/nginx/tasks/regression.yml` and import
 those assertion tasks from the scenario's `verify.yml`. In the existing managed
@@ -427,21 +457,10 @@ recovery. Both original and repaired lifecycles include idempotence and cleanup.
 AWS requires both RHEL 9 and RHEL 10. CNV uses the configured CentOS Stream guest.
 Receipts remain in the reported directory; failed cleanup remains a failed run.
 
-Copy the completed `result.json` to the operator machine. With the operator's
-Forgejo URL/token in its environment, publish it **outside** the coding sandbox:
-
-```bash
-ansible-playbook -i localhost, playbooks/webapp/publish-regression.yml \
-  -e webapp_candidate_sha=<published-head-sha> \
-  -e webapp_base_sha=<incident-merge-base-sha> \
-  -e webapp_validation_receipt_file=/path/to/operator/result.json
-```
-
-The publisher requires all receipt checks and uses the independent `demo-reviewer`
-identity through an operator admin token. Never expose that token to candidate
-processes. `webapp_validation_state=pending` or `failure` can record an in-progress
-or failed attempt without a success receipt. Branch protection and promotion both
-require `webapp/regression-validation`; agent-created checks are rejected.
+The manual runner returns a regression-only receipt for diagnostics. It does
+not satisfy the complete `webapp-ci-v2` gate. Normal promotion requires the
+independent AAP validator's full lint/build/unit/Molecule/red/green verdict,
+published by `demo_ci_publish`; do not substitute a manually created success.
 
 Pinned deployment jobs use Controller's protected `awx_job_scm_branch` as the full
 approved SHA. Only jobs without an override use `awx_project_revision`, which can

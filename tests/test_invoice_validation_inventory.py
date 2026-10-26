@@ -18,7 +18,7 @@ class InvoiceValidationInventoryTests(unittest.TestCase):
         tasks = next(t['block'] for t in play['tasks'] if t['name'] == 'Run independent candidate validation')
         lint = next(t for t in tasks if t['name'] == 'Lint the candidate invoice automation')
         inventory = next(t for t in tasks if t['name'] == 'Write an isolated inventory for syntax checks')
-        machine = next(t for t in tasks if t['name'] == 'Test the authored workflow on ephemeral RHEL EC2 instances')
+        machine = next(t for t in tasks if t['name'] == 'Exercise every authored Molecule scenario')
         shared = {'PROVISIONER': 'aws', 'INVOICE_SOURCE_COMMIT': 'a' * 40}
         expression = lint['environment'].removeprefix('{{').removesuffix('}}').strip()
         jinja = Environment(undefined=StrictUndefined)

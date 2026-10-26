@@ -110,7 +110,7 @@ class ValidationStatusTests(unittest.TestCase):
             'summary_fields':{'job_template':{'name':'invoice_validate'},'project':{'name':'demojam-ansible'}},
             'extra_vars':json.dumps({'invoice_candidate_sha':'a'*40}), 'status':'successful',
             'artifacts':{'invoice_validation':{'passed':True,'source_revision':'a'*40,
-                          'acceptance_suite':'trusted-invoice-v1','backend':'aws'}}}}}
+                          'acceptance_suite':'trusted-invoice-v2','backend':'aws'}}}}}
 
     def check(self, expected, passes=True):
         tasks = self.tasks + [{'name':'Require the expected validation outcome',

@@ -183,6 +183,12 @@
             msg:
               receipts_directory: '{{ webapp_validation_directory.path }}'
               result: '{{ lookup("ansible.builtin.file", webapp_validation_directory.path ~ "/result.json") | from_json }}'
+        - name: Return the receipt to the calling trusted CI runner
+          when: webapp_validation_receipt_destination is defined
+          ansible.builtin.copy:
+            dest: '{{ webapp_validation_receipt_destination }}'
+            mode: '0600'
+            content: '{{ lookup("ansible.builtin.file", webapp_validation_directory.path ~ "/result.json") }}'
       rescue:
         - name: Keep failed independent validation unsuccessful
           ansible.builtin.fail:

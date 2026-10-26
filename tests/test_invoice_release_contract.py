@@ -30,7 +30,7 @@ class ReleaseContractTests(unittest.TestCase):
                 'summary_fields': {'job_template': {'name': 'invoice_validate'}, 'project': {'name': 'demojam-ansible'}},
                 'extra_vars': json.dumps({'invoice_candidate_sha': 'a' * 40}),
                 'artifacts': {'invoice_validation': {'passed': True, 'source_revision': 'a' * 40,
-                    'acceptance_suite': 'trusted-invoice-v1', 'backend': 'aws', 'wheel_sha256': 'b' * 64,
+                    'acceptance_suite': 'trusted-invoice-v2', 'backend': 'aws', 'wheel_sha256': 'b' * 64,
                     'profile_sha256': digest(material['profile']), 'material_sha256': digest(material),
                     'release_manifest_sha256': 'd' * 64}}}},
         }
