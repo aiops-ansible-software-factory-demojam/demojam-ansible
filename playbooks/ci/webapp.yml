@@ -56,11 +56,21 @@
             argv: [ansible-galaxy, collection, install, '{{ ci_built.files[0].path }}', --force, --no-deps, -p, '{{ ci_directory.path }}/installed']
           environment: '{{ ci_environment }}'
           changed_when: false
+        - name: Isolate lint from Controller and disposable-machine inventories
+          ansible.builtin.copy:
+            dest: '{{ ci_directory.path }}/lint-inventory.yml'
+            mode: '0600'
+            content: |
+              ---
+              all:
+                hosts:
+                  localhost:
+                    ansible_connection: local
         - name: Lint production playbooks and the authored regression scenario
           ansible.builtin.command:
             argv: [ansible-lint, roles/nginx, playbooks, extensions/molecule/nginx]
             chdir: '{{ ci_directory.path }}/source'
-          environment: '{{ ci_environment }}'
+          environment: '{{ ci_environment | combine({"ANSIBLE_INVENTORY": ci_directory.path ~ "/lint-inventory.yml"}) }}'
           changed_when: false
         - name: Run all collection unit tests
           ansible.builtin.command:
