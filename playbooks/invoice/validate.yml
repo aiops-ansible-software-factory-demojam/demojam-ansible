@@ -160,7 +160,10 @@
           changed_when: false
         - name: Run all collection unit tests with the pinned baseline dependency
           ansible.builtin.command:
-            argv: ['{{ invoice_validation_directory.path }}/units/bin/python', '{{ playbook_dir }}/../ci/run-unit-tests.py', tests]
+            argv:
+              - '{{ invoice_validation_directory.path }}/units/bin/python'
+              - '{{ playbook_dir }}/../ci/run-unit-tests.py'
+              - tests
             chdir: '{{ invoice_validation_directory.path }}/source'
           changed_when: false
           environment: '{{ invoice_test_environment }}'
