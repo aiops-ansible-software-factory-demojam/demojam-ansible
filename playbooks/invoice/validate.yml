@@ -168,7 +168,7 @@
               - tests
             chdir: '{{ invoice_validation_directory.path }}/source'
           changed_when: false
-          environment: '{{ invoice_test_environment }}'
+          environment: '{{ invoice_test_environment | combine({"TMPDIR": "/opt"}) }}'
         - name: Exercise every authored Molecule scenario
           ansible.builtin.command:
             argv:
