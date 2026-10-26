@@ -8,6 +8,9 @@ import sys
 
 def sanitize(report, environment):
     text = '\n'.join(str(report.get(key, '')) for key in ['stage', 'msg', 'stderr', 'stdout'])
+    # Runner hides event UUID metadata behind cursor-control sequences.
+    # Remove those frames before ordinary ANSI stripping exposes their base64.
+    text = re.sub(r'\x1b\[K(?:[A-Za-z0-9+/=]+\x1b\[\d+D)+\x1b\[K', '', text)
     text = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', text)
     text = re.sub(r'\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)', '', text)
     for key, value in environment.items():

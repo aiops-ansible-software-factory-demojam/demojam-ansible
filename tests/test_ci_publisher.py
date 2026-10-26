@@ -72,6 +72,9 @@ class PublisherTests(unittest.TestCase):
         self.assertIn('Keep policy idempotent',feedback)
         self.assertIn('Idempotence test failed',feedback)
         self.assertLessEqual(len(feedback),6000)
+        framed = '\x1b[KeyJ1dWlkIjogImZpeHR1cmUifQ==\x1b[28D\x1b[Kchanged: [rhel9]'
+        cleaned = module.sanitize({'stderr':framed},{})
+        self.assertEqual(cleaned,'\n\nchanged: [rhel9]\n')
 
 
 if __name__ == '__main__':unittest.main()
