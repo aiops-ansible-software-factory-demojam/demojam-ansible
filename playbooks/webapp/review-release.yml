@@ -30,6 +30,7 @@
         that:
           - webapp_merged_pr.json.merged | bool
           - webapp_merged_pr.json.head_sha == webapp_candidate_sha
+          - webapp_merged_pr.json.regression_validated | default(false) | bool
     - name: Read this native production execution
       ansible.builtin.uri:
         url: '{{ webapp_review_api }}/workflow_jobs/{{ awx_workflow_job_id }}/'

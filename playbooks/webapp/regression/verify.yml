@@ -1,0 +1,44 @@
+---
+- name: Verify independently provisioned guests
+  ansible.builtin.import_playbook: utils/playbooks/verify.yml
+
+- name: Require identical authored assertions to fail before and pass after
+  hosts: molecule
+  become: true
+  gather_facts: false
+  vars_files:
+    - '{{ lookup("ansible.builtin.env", "WEBAPP_REGRESSION_SOURCE") }}/vars/webapp.yml'
+  vars:
+    webapp_regression_phase: '{{ lookup("ansible.builtin.env", "WEBAPP_REGRESSION_PHASE") }}'
+  tasks:
+    - name: Initialize this host regression verdict
+      ansible.builtin.set_fact:
+        webapp_authored_assertion_failed: false
+    - name: Observe the authored regression without accepting infrastructure errors as red
+      block:
+        - name: Run the immutable candidate-authored regression tasks in both phases
+          ansible.builtin.include_tasks: '{{ lookup("ansible.builtin.env", "WEBAPP_AUTHORED_REGRESSION") }}'
+      rescue:
+        - name: Require an assertion failure from original code only
+          ansible.builtin.assert:
+            that:
+              - webapp_regression_phase == 'before'
+              - ansible_failed_task.action in ['ansible.builtin.assert', 'assert']
+            fail_msg: A repaired-source failure or infrastructure error cannot establish regression coverage.
+        - name: Record the expected original-code assertion failure
+          ansible.builtin.set_fact:
+            webapp_authored_assertion_failed: true
+    - name: Require a red verdict on every original host and green on every repaired host
+      ansible.builtin.assert:
+        that: webapp_authored_assertion_failed == (webapp_regression_phase == 'before')
+        fail_msg: The identical authored regression must fail on the original code and pass on the fix.
+    - name: Independently verify durable repaired SELinux policy
+      when: webapp_regression_phase == 'after'
+      ansible.builtin.import_tasks: durable.yml
+    - name: Write this host trusted regression receipt
+      ansible.builtin.copy:
+        dest: '{{ lookup("ansible.builtin.env", "WEBAPP_REGRESSION_RECEIPTS") }}/{{ webapp_regression_phase }}-{{ inventory_hostname }}.json'
+        mode: '0600'
+        content: '{{ {"phase": webapp_regression_phase, "host": inventory_hostname, "passed": true} | to_json }}'
+      delegate_to: localhost
+      become: false

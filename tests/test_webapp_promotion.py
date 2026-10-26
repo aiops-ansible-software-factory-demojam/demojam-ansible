@@ -16,7 +16,7 @@ class WebPromotionTests(unittest.TestCase):
         self.launch = {'webapp_candidate_sha': self.sha, 'webapp_issue_number': 1, 'webapp_pr_number': 2}
         self.v = {**self.launch, 'awx_workflow_job_id': 10, 'awx_workflow_job_name': 'webapp_promote', 'awx_job_id': 12,
             'webapp_require_production_approval': True,
-            'webapp_merged_pr': {'json': {'merged': True, 'head_sha': self.sha}},
+            'webapp_merged_pr': {'json': {'merged': True, 'head_sha': self.sha, 'regression_validated': True}},
             'webapp_promotion_workflow': {'json': {'name': 'webapp_promote', 'scm_branch': self.sha, 'extra_vars': json.dumps(self.launch)}},
             'webapp_promotion_nodes': {'json': {'count': 4, 'results': [
                 {'identifier': 'production-approval', 'summary_fields': {'job': {'type': 'workflow_approval', 'status': 'successful'}}},
@@ -32,9 +32,10 @@ class WebPromotionTests(unittest.TestCase):
             self.assertEqual(r.returncode == 0, passes, r.stdout + r.stderr)
     def test_review_requires_matching_merge_source_and_approval(self):
         self.run_tasks(self.v, self.review_tasks)
-        for field in ['merge', 'source', 'approval', 'job', 'incident', 'contract']:
+        for field in ['merge', 'regression', 'source', 'approval', 'job', 'incident', 'contract']:
             v = copy.deepcopy(self.v)
             if field == 'merge': v['webapp_merged_pr']['json']['merged'] = False
+            if field == 'regression': v['webapp_merged_pr']['json']['regression_validated'] = False
             if field == 'source': v['webapp_promotion_workflow']['json']['scm_branch'] = 'b' * 40
             if field == 'approval': v['webapp_promotion_nodes']['json']['results'][0]['summary_fields']['job']['status'] = 'pending'
             if field == 'job': v['awx_job_id'] = 99

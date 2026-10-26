@@ -1,0 +1,56 @@
+---
+- name: Publish operator-controlled nginx regression evidence outside the coding sandbox
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    webapp_validation_state: success
+    webapp_validation_api: '{{ lookup("ansible.builtin.env", "FORGEJO_URL") }}/api/v1/repos/demo-owner/ansible-collection-demo.webapp'
+  tasks:
+    - name: Require exact operator-selected source identities and a bounded result state
+      ansible.builtin.assert:
+        that:
+          - webapp_candidate_sha is match('^[0-9a-f]{40}$')
+          - webapp_base_sha is match('^[0-9a-f]{40}$')
+          - webapp_candidate_sha != webapp_base_sha
+          - webapp_validation_state in ['pending', 'success', 'failure']
+          - lookup('ansible.builtin.env', 'FORGEJO_URL') is match('^https://')
+          - lookup('ansible.builtin.env', 'FORGEJO_TOKEN') | length > 0
+    - name: Read the independently produced receipt for a successful validation
+      when: webapp_validation_state == 'success'
+      ansible.builtin.set_fact:
+        webapp_validation_receipt: '{{ lookup("ansible.builtin.file", webapp_validation_receipt_file) | from_json }}'
+    - name: Require both source revisions and all independent checks in the receipt
+      when: webapp_validation_state == 'success'
+      ansible.builtin.assert:
+        that:
+          - webapp_validation_receipt.passed | bool
+          - webapp_validation_receipt.suite == 'webapp-regression-v1'
+          - webapp_validation_receipt.source_revision == webapp_candidate_sha
+          - webapp_validation_receipt.base_revision == webapp_base_sha
+          - webapp_validation_receipt.regression_sha256 is match('^[0-9a-f]{64}$')
+          - webapp_validation_receipt.red | bool
+          - webapp_validation_receipt.green | bool
+          - webapp_validation_receipt.durable | bool
+    # This credential stays on the operator's machine. Never pass it into the
+    # managed coding/test sandbox or inherit it into candidate tool processes.
+    - name: Publish the independent reviewer status for the exact candidate commit
+      ansible.builtin.uri:
+        url: '{{ webapp_validation_api }}/statuses/{{ webapp_candidate_sha }}'
+        method: POST
+        headers:
+          Authorization: 'token {{ lookup("ansible.builtin.env", "FORGEJO_TOKEN") }}'
+          Sudo: demo-reviewer
+        body_format: json
+        body:
+          state: '{{ webapp_validation_state }}'
+          context: webapp/regression-validation
+          description: >-
+            {{ 'webapp-regression-v1 base=' ~ webapp_base_sha ~ ' red=passed green=passed durable=passed'
+            if webapp_validation_state == 'success' else 'Independent nginx regression ' ~ webapp_validation_state }}
+        status_code: 201
+      register: webapp_published_validation
+      no_log: true
+    - name: Require the independent reviewer identity rather than an agent-created check
+      ansible.builtin.assert:
+        that: webapp_published_validation.json.creator.login == 'demo-reviewer'

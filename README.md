@@ -400,5 +400,49 @@ gate and bind native workflow/approval identities to the same incident and sourc
 Collection checks run before guest access; final proof requires every approved web
 host to report enforcing SELinux, HTTP 200 and the exact deployed source. The old
 `webapp_nginx` job remains baseline/setup automation. Independent operator RHEL
-validation remains required before human merge; no nginx machine acceptance runner
-is introduced here. The coding agent cannot merge or approve deployment.
+validation remains required before human merge. The coding agent cannot merge or
+approve deployment.
+
+### Independent nginx regression validation
+
+Each fix must change `extensions/molecule/nginx/tasks/regression.yml` and import
+those assertion tasks from the scenario's `verify.yml`. In the existing managed
+sandbox, the operator runs this repository's trusted runner after the author is
+idle, using the exact published commit and Forgejo's preserved `merge_base`:
+
+```bash
+source /etc/profile.d/molecule.sh
+ansible-playbook -i localhost, /trusted/demojam-ansible/playbooks/webapp/validate-regression.yml \
+  -e webapp_source_directory=/path/to/clean/candidate \
+  -e webapp_candidate_sha=<published-head-sha> \
+  -e webapp_base_sha=<incident-merge-base-sha>
+```
+
+The runner exports source without modifying the coding workspace. On every
+disposable guest the same authored assertion must fail with the original code
+and pass with the repaired code. Infrastructure failures and tests that already
+pass the original are rejected. A trusted check independently invalidates file
+labels, restores them from persistent SELinux policy, and requires enforcing HTTP
+recovery. Both original and repaired lifecycles include idempotence and cleanup.
+AWS requires both RHEL 9 and RHEL 10. CNV uses the configured CentOS Stream guest.
+Receipts remain in the reported directory; failed cleanup remains a failed run.
+
+Copy the completed `result.json` to the operator machine. With the operator's
+Forgejo URL/token in its environment, publish it **outside** the coding sandbox:
+
+```bash
+ansible-playbook -i localhost, playbooks/webapp/publish-regression.yml \
+  -e webapp_candidate_sha=<published-head-sha> \
+  -e webapp_base_sha=<incident-merge-base-sha> \
+  -e webapp_validation_receipt_file=/path/to/operator/result.json
+```
+
+The publisher requires all receipt checks and uses the independent `demo-reviewer`
+identity through an operator admin token. Never expose that token to candidate
+processes. `webapp_validation_state=pending` or `failure` can record an in-progress
+or failed attempt without a success receipt. Branch protection and promotion both
+require `webapp/regression-validation`; agent-created checks are rejected.
+
+Pinned deployment jobs use Controller's protected `awx_job_scm_branch` as the full
+approved SHA. Only jobs without an override use `awx_project_revision`, which can
+otherwise describe a later default-project merge commit.

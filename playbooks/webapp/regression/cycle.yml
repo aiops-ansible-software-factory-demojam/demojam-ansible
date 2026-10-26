@@ -1,0 +1,24 @@
+---
+- name: Run one full trusted original or repaired lifecycle
+  block:
+    - name: Exercise the authored regression and trusted acceptance
+      ansible.builtin.command:
+        argv: [molecule, --base-config, molecule.yml, test, -s, regression]
+        chdir: '{{ webapp_validation_directory.path }}/harness'
+      environment: '{{ webapp_regression_environment }}'
+      changed_when: false
+  rescue:
+    - name: Destroy disposable regression guests after any failed lifecycle
+      ansible.builtin.command:
+        argv: [molecule, --base-config, molecule.yml, destroy, -s, regression]
+        chdir: '{{ webapp_validation_directory.path }}/harness'
+      environment: '{{ webapp_regression_environment }}'
+      register: webapp_regression_cleanup
+      failed_when: false
+      changed_when: false
+    - name: Preserve failure instead of treating cleanup as a test pass
+      ansible.builtin.fail:
+        msg: >-
+          Independent {{ webapp_regression_phase }} regression lifecycle failed.
+          Cleanup returned {{ webapp_regression_cleanup.rc }}. Inspect receipts
+          and owned disposable resources before retrying.

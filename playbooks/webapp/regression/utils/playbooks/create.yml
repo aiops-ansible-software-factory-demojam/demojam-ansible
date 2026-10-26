@@ -1,0 +1,49 @@
+---
+- name: Check sandbox test prerequisites
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    molecule_backend: "{{ lookup('ansible.builtin.env', 'PROVISIONER', default='kubevirt') }}"
+  tasks:
+    - name: Require the sandbox test kubeconfig
+      when: molecule_backend == 'kubevirt'
+      ansible.builtin.assert:
+        that:
+          - lookup('ansible.builtin.env', 'KUBECONFIG') | length > 0
+        fail_msg: Run this scenario in a demo Omnigent sandbox with its test credential mount.
+
+    - name: Read the golden image DataSource
+      when: molecule_backend == 'kubevirt'
+      vars:
+        molecule_boot_source: "{{ hostvars[item].mp.kubevirt.boot_source }}"
+      kubernetes.core.k8s_info:
+        api_version: cdi.kubevirt.io/v1beta1
+        kind: DataSource
+        name: "{{ molecule_boot_source.source_ref.name }}"
+        namespace: "{{ molecule_boot_source.source_ref.namespace }}"
+      loop: "{{ groups['molecule'] }}"
+      register: molecule_datasources
+
+    - name: Require a ready golden image
+      when: molecule_backend == 'kubevirt'
+      vars:
+        molecule_boot_source: "{{ hostvars[item.item].mp.kubevirt.boot_source }}"
+      ansible.builtin.assert:
+        that:
+          - item.resources | length == 1
+          - >-
+            item.resources[0].status.conditions | default([])
+            | selectattr('type', 'equalto', 'Ready')
+            | selectattr('status', 'equalto', 'True') | list | length == 1
+        fail_msg: >-
+          DataSource {{ molecule_boot_source.source_ref.namespace }}/{{ molecule_boot_source.source_ref.name }}
+          must be ready before running Molecule.
+      loop: "{{ molecule_datasources.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+- name: Provision molecule instances
+  ansible.builtin.import_playbook: david_igou.molecule_provisioners.create
+  vars:
+    molecule_scenario_name: "{{ lookup('ansible.builtin.env', 'MOLECULE_SCENARIO_NAME') }}"
