@@ -74,7 +74,7 @@
           changed_when: false
         - name: Run all collection unit tests
           ansible.builtin.command:
-            argv: ['{{ ansible_playbook_python }}', -m, unittest, discover, -s, tests, -v]
+            argv: ['{{ ansible_playbook_python }}', '{{ playbook_dir }}/run-unit-tests.py', tests]
             chdir: '{{ ci_directory.path }}/source'
           environment: '{{ ci_environment }}'
           changed_when: false
