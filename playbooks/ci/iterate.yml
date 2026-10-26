@@ -94,6 +94,7 @@
           ansible.builtin.uri:
             url: '{{ ci_agent_api }}/v1/sessions/{{ ci_author_session }}/events'
             method: POST
+            status_code: 202
             headers:
               Authorization: 'Bearer {{ ci_agent_auth.json.access_token }}'
             body_format: json

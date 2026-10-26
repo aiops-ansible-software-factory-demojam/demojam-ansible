@@ -40,7 +40,7 @@ class IterationTests(unittest.TestCase):
                 if self.path=='/oauth/token':return self.send({'access_token':'fixture'})
                 body=json.loads(raw)
                 if self.path.endswith('/events'):
-                    fixture['events'].append((self.path,body));return self.send({'id':session})
+                    fixture['events'].append((self.path,body));return self.send({'id':session},202)
                 template=int(self.path.split('/')[-3]);jid=len(fixture['jobs'])+1
                 fixture['launches'].append((template,body))
                 fixture['jobs'][jid]={'id':jid,'status':'failed'if template==20 and fixture['case']!='repaired'else'successful'}
@@ -61,7 +61,7 @@ class IterationTests(unittest.TestCase):
                     self.assertEqual(result.returncode,0,result.stdout+result.stderr)
                     expected=[]if case in ['no-pr','pending','green','existing-failure']else[10,20,10]
                     self.assertEqual([x[0]for x in fixture['launches']],expected)
-                    if expected:self.assertEqual(fixture['launches'][-1][1]['extra_vars']['ci_validation_job_id'],2)
+                    if expected:self.assertEqual(int(fixture['launches'][-1][1]['extra_vars']['ci_validation_job_id']),2)
                     self.assertEqual(len(fixture['events']),1 if case in ['failure','existing-failure']else 0)
                     if fixture['events']:
                         self.assertIn(session,fixture['events'][0][0]);self.assertIn('same task',fixture['events'][0][1]['data']['content'][0]['text'])
