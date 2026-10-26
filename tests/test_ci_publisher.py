@@ -67,6 +67,11 @@ class PublisherTests(unittest.TestCase):
             {'AWS_SECRET_ACCESS_KEY':'PRIVATE-CLOUD-SECRET'})
         for secret in ['abcdefgh','secretvalue','user:pass','PRIVATE-CLOUD-SECRET']:self.assertNotIn(secret,text)
         self.assertLessEqual(len(module.sanitize({'stdout':'x'*10000},{})),6000)
+        report = {'stage':'Molecule', 'stderr':'setup\n'*2000 + 'TASK [Keep policy idempotent]\nchanged=1\nCRITICAL Idempotence test failed\n' + 'cleanup succeeded\n'*2000}
+        feedback = module.sanitize(report,{})
+        self.assertIn('Keep policy idempotent',feedback)
+        self.assertIn('Idempotence test failed',feedback)
+        self.assertLessEqual(len(feedback),6000)
 
 
 if __name__ == '__main__':unittest.main()

@@ -17,7 +17,17 @@ def sanitize(report, environment):
     text = re.sub(r'\b(?:AKIA|ASIA)[A-Z0-9]{16}\b', '[redacted]', text)
     text = re.sub(r'(?i)((?:password|api[_-]?key|secret[_-]?(?:access[_-]?)?key|token)[\s\"\x27]*[:=][\s\"\x27]*)[^\s\"\x27,}]+', r'\1[redacted]', text)
     text = re.sub(r'(https?://)[^/\s:@]+:[^@\s/]+@', r'\1[redacted]@', text)
-    return text if len(text) <= 6000 else text[:300] + '\n...\n' + text[-5690:]
+    if len(text) <= 6000:
+        return text
+    # Molecule appends lengthy successful destruction logs after a failure.
+    # Retain the failing stage and its recap instead of only the cleanup tail.
+    failure = re.search(r'(?im)^.*(?:CRITICAL Idempotence test failed|fatal:|^ERROR:|^FAILED \(|Traceback \(most recent call last\)).*$', text)
+    if failure:
+        start = max(300, failure.start() - 3500)
+        end = min(len(text), failure.end() + 1400)
+        return (text[:300] + '\n... failure context ...\n' + text[start:end]
+                + '\n... cleanup tail ...\n' + text[-500:])[:6000]
+    return text[:300] + '\n...\n' + text[-5690:]
 
 
 if __name__ == '__main__':
