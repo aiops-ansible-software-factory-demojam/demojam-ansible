@@ -6,6 +6,8 @@
   vars:
     invoice_repository: http://forgejo.forgejo.svc.cluster.local:3000/demo-owner/ansible-collection-demo.pythonapp.git
     invoice_test_environment:
+      ANSIBLE_STDOUT_CALLBACK: default
+      ANSIBLE_FORCE_COLOR: 'false'
       PROVISIONER: aws
       INVOICE_SOURCE_COMMIT: "{{ invoice_candidate_sha }}"
       INVOICE_MATERIAL_FILE: "{{ lookup('ansible.builtin.env', 'INVOICE_MATERIAL_FILE') }}"

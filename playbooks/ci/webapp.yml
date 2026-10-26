@@ -19,7 +19,8 @@
       ansible.builtin.set_fact:
         ci_environment: >-
           {{ lookup('ansible.builtin.file', lookup('ansible.builtin.env', 'DEMO_CI_PROFILE_FILE')) | from_json
-          | combine({'ANSIBLE_COLLECTIONS_PATH': ci_directory.path ~ '/installed:/usr/share/ansible/collections'}) }}
+          | combine({'ANSIBLE_COLLECTIONS_PATH': ci_directory.path ~ '/installed:/usr/share/ansible/collections',
+          'ANSIBLE_STDOUT_CALLBACK': 'default', 'ANSIBLE_FORCE_COLOR': 'false'}) }}
     - name: Validate candidate automation and regression coverage
       block:
         - name: Fetch the exact published collection commit
