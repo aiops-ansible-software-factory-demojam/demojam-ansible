@@ -366,3 +366,22 @@ Older acceptance records without `material_sha256` cannot authorize this path;
 run independent validation again. Old per-release objects are not deleted during
 configuration, so historical or running executions remain available. Remove them
 separately after confirming no execution still uses them.
+
+CVE response routing reads actual successful `invoice_check` and `invoice_discover`
+job receipts through `invoice_route`, validating template/project identity, complete
+host evidence and current profile hashes. The four outcomes are `app_patch`,
+`contain`, `log_only` and `manual_review`. A compatible approved Lightwell fix keeps
+the existing authoring and promotion flow. Unknown evidence or unsupported ecosystems
+require manual review; lower-severity no-fix findings retain a deferred review.
+API/discovery errors stop rather than masquerading as a missing fix.
+
+`invoice_record_response` maintains separate deduplicated security tickets with an
+anchored review deadline. Their marker cannot trigger the coding agent. Temporary
+containment uses a separate `invoice_contain` approval workflow: trusted receipt
+check → human approval → trusted recheck → scoped collection service shutdown.
+The request pins the configured application SCM revision, profile and exact hosts.
+The collection rechecks live dependency identity, stops/disables only the configured
+application service, and publishes verified containment with `fixed: false`.
+A later approved fixed release restores service through the existing deployment
+role. Only fixed versions with healthy business checks close either incident type.
+No generic OS patching, CME integration or automatic review scheduler is included.

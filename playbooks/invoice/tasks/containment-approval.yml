@@ -1,0 +1,45 @@
+---
+- name: Require the native containment workflow context
+  ansible.builtin.assert:
+    that:
+      - awx_workflow_job_id | default(0) | int > 0
+      - awx_workflow_job_name | default('') == 'invoice_contain'
+- name: Read this containment execution
+  ansible.builtin.uri:
+    url: '{{ invoice_review_api }}/workflow_jobs/{{ awx_workflow_job_id }}/'
+    url_username: '{{ invoice_review_username }}'
+    url_password: '{{ invoice_review_password }}'
+    force_basic_auth: true
+    validate_certs: true
+    return_content: true
+  register: invoice_containment_workflow
+  no_log: true
+  check_mode: false
+- name: Read the actual containment approval and gate jobs
+  ansible.builtin.uri:
+    url: '{{ invoice_review_api }}/workflow_jobs/{{ awx_workflow_job_id }}/workflow_nodes/?page_size=20'
+    url_username: '{{ invoice_review_username }}'
+    url_password: '{{ invoice_review_password }}'
+    force_basic_auth: true
+    validate_certs: true
+    return_content: true
+  register: invoice_containment_nodes
+  no_log: true
+  check_mode: false
+- name: Select the containment approval and current recheck
+  ansible.builtin.set_fact:
+    invoice_containment_approval: '{{ invoice_containment_nodes.json.results | selectattr("identifier", "equalto", "containment-approval") | list }}'
+    invoice_containment_gate: '{{ invoice_containment_nodes.json.results | selectattr("identifier", "equalto", "recheck-request") | list }}'
+- name: Require approval of this exact containment request
+  ansible.builtin.assert:
+    that:
+      - invoice_containment_workflow.json.name == 'invoice_contain'
+      - invoice_containment_workflow.json.scm_branch == invoice_trusted_response.source_revision
+      - (invoice_containment_workflow.json.extra_vars | from_json).invoice_response == invoice_trusted_response
+      - (invoice_containment_workflow.json.extra_vars | from_json).invoice_router_job_id | int == invoice_router_job_id | int
+      - invoice_containment_nodes.json.count == 4
+      - invoice_containment_approval | length == 1
+      - invoice_containment_gate | length == 1
+      - invoice_containment_approval[0].summary_fields.job.type == 'workflow_approval'
+      - invoice_containment_approval[0].summary_fields.job.status == 'successful'
+      - invoice_containment_gate[0].job | int == awx_job_id | int

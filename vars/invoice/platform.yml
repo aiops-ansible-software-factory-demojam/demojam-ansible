@@ -276,6 +276,56 @@ invoice_platform_controller_templates:
     ask_scm_branch_on_launch: true
     ask_variables_on_launch: true
     allow_simultaneous: false
+  - name: invoice_route
+    organization: demo
+    project: demojam-ansible
+    inventory: demo-inventory
+    execution_environment: "{{ invoice_factory_ee_name }}"
+    playbook: playbooks/invoice/route.yml
+    credentials:
+      - demo-invoice-review-api
+      - demo-invoice-artifacts
+    become_enabled: false
+    ask_variables_on_launch: true
+    allow_simultaneous: false
+  - name: invoice_record_response
+    organization: demo
+    project: demojam-ansible
+    inventory: demo-inventory
+    execution_environment: "{{ invoice_factory_ee_name }}"
+    playbook: playbooks/invoice/record-response.yml
+    credentials:
+      - demo-invoice-review-api
+      - demo-invoice-artifacts
+      - demo-forgejo-issues
+    become_enabled: false
+    ask_variables_on_launch: true
+    allow_simultaneous: false
+  - name: invoice_prepare_containment
+    organization: demo
+    project: demojam-ansible
+    inventory: demo-inventory
+    execution_environment: "{{ invoice_factory_ee_name }}"
+    playbook: playbooks/invoice/prepare-containment.yml
+    credentials:
+      - demo-invoice-review-api
+      - demo-invoice-artifacts
+    become_enabled: false
+    ask_variables_on_launch: true
+    allow_simultaneous: false
+  - name: invoice_contain_service
+    organization: demo
+    project: invoice-collection
+    inventory: demo-inventory
+    execution_environment: "{{ invoice_factory_ee_name }}"
+    playbook: playbooks/contain-invoice.yml
+    ask_scm_branch_on_launch: true
+    credentials:
+      - demo-pythonapp-ssh
+      - demo-invoice-artifacts
+    become_enabled: true
+    ask_variables_on_launch: true
+    allow_simultaneous: false
 invoice_platform_controller_projects:
   - name: invoice-collection
     organization: demo
@@ -314,3 +364,30 @@ invoice_platform_controller_workflows:
           - deploy
       - identifier: deploy
         unified_job_template: invoice_deploy
+  - name: invoice_contain
+    ask_scm_branch_on_launch: true
+    organization: demo
+    description: Approve temporary application shutdown; the dependency remains vulnerable and the security ticket stays open.
+    inventory: demo-inventory
+    ask_variables_on_launch: true
+    allow_simultaneous: false
+    simplified_workflow_nodes:
+      - identifier: validate-request
+        unified_job_template: invoice_prepare_containment
+        success_nodes:
+          - containment-approval
+      - identifier: containment-approval
+        approval_node:
+          name: Approve temporary application outage
+          description: Stop and disable the scoped application service; restore through a reviewed fixed release.
+          timeout: 1800
+        success_nodes:
+          - recheck-request
+      - identifier: recheck-request
+        unified_job_template: invoice_prepare_containment
+        extra_data:
+          invoice_require_containment_approval: true
+        success_nodes:
+          - contain
+      - identifier: contain
+        unified_job_template: invoice_contain_service

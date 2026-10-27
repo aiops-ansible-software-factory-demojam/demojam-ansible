@@ -10,11 +10,20 @@
     remediation_profile: "{{ remediation_material.profile }}"
     remediation_base_url: "{{ remediation_profile.application.base_url | default('http://127.0.0.1') }}"
   tasks:
+    - name: Observe configured application service state
+      ansible.builtin.service_facts:
+      when: remediation_profile.application.service is defined
+    - name: Select availability separately from vulnerability state
+      ansible.builtin.set_fact:
+        remediation_service_running: >-
+          {{ remediation_profile.application.service is not defined or
+          ansible_facts.services.get(remediation_profile.application.service ~ '.service', {}).get('state', '') == 'running' }}
     - name: Read the actual running package identity
       ansible.builtin.uri:
         url: >-
           {{ remediation_base_url }}{{ remediation_profile.application.status_path | default("/api/status") }}
         return_content: true
+      when: remediation_service_running | bool
       register: invoice_status
     - name: Read dependency metadata from the actual application Python environment
       ansible.builtin.command:
@@ -38,8 +47,10 @@
         method: "{{ item.method | default(\"GET\") }}"
         return_content: true
       loop: "{{ remediation_profile.validation.business_checks }}"
+      when: remediation_service_running | bool
       register: remediation_business
     - name: Require successful business processing
+      when: remediation_service_running | bool
       ansible.builtin.assert:
         that:
           - item.json.status == item.item.status
@@ -48,7 +59,7 @@
       loop_control:
         label: "{{ item.item.path }}"
     - name: Exercise an optional application-specific regression
-      when: remediation_profile.validation.regression is defined
+      when: remediation_profile.validation.regression is defined and remediation_service_running | bool
       ansible.builtin.uri:
         url: "{{ remediation_base_url }}{{ remediation_profile.validation.regression.path }}"
         method: "{{ remediation_profile.validation.regression.method | default(\"POST\") }}"
@@ -58,9 +69,9 @@
     - name: Record each host finding without inferring a CVE from a timeout
       ansible.builtin.set_fact:
         remediation_finding: >-
-          {{ lightwell_finding | combine({'host': inventory_hostname, 'business_passed': true, 'release':
-          invoice_status.json.release | default({}), 'normal': remediation_business.results[0].json, 'business_checks':
-          remediation_business.results | map(attribute='json') | list, 'regression': invoice_regression.json | default({})})
+          {{ lightwell_finding | combine({'host': inventory_hostname, 'business_passed': remediation_service_running | bool, 'release':
+          invoice_status.json.release | default({}), 'normal': remediation_business.results[0].json | default({}), 'business_checks':
+          remediation_business.results | selectattr('json', 'defined') | map(attribute='json') | list, 'regression': invoice_regression.json | default({})})
           }}
     - name: Require the exact promoted release and successful business regression
       when: invoice_expected_source_revision is defined or invoice_expected_wheel_sha256 is defined
