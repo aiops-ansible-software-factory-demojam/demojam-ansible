@@ -417,8 +417,11 @@ approval still happen after green CI.
 trusted red/green/relabel recovery. `invoice_validate` runs all unit and Molecule
 tests plus trusted invoice acceptance. Its preflight resolves the actual release
 role from a raw AAP checkout without installing the candidate collection first.
-Application unit tests use a separate Python environment with the hash-verified
-baseline wheel. Test subprocesses never inherit the reviewer or AAP API token.
+The full Python unit suite runs as root on both disposable RHEL guests during
+trusted preparation, using a separate Python environment and the hash-verified
+baseline wheel. This preserves the real ownership checks and the role's `/opt`
+restriction while the Controller execution remains unprivileged. Skipped tests
+and expected failures cannot produce a passing receipt. Test subprocesses never inherit the reviewer or AAP API token.
 `demo_ci_iteration` launches allowlisted validation/publisher jobs using the Controller API
 and sends source-bound feedback only to the existing author: queued once per failed
 commit while active, or resumed while idle. It never interrupts or executes candidate code.

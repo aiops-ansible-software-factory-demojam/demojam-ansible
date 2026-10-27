@@ -29,7 +29,7 @@ class ReleaseContractTests(unittest.TestCase):
             'invoice_validation_record': {'json': {'status': 'successful', 'execution_environment': 8,
                 'summary_fields': {'job_template': {'name': 'invoice_validate'}, 'project': {'name': 'demojam-ansible'}},
                 'extra_vars': json.dumps({'invoice_candidate_sha': 'a' * 40}),
-                'artifacts': {'invoice_validation': {'passed': True, 'source_revision': 'a' * 40,
+                'artifacts': {'invoice_validation': {'passed': True, 'unit': True, 'source_revision': 'a' * 40,
                     'acceptance_suite': 'trusted-invoice-v2', 'backend': 'aws', 'wheel_sha256': 'b' * 64,
                     'profile_sha256': digest(material['profile']), 'material_sha256': digest(material),
                     'release_manifest_sha256': 'd' * 64}}}},
@@ -60,11 +60,12 @@ class ReleaseContractTests(unittest.TestCase):
                 self.run_gate(v, False)
 
     def test_failed_untrusted_or_wrong_source_validation_is_rejected(self):
-        for field in ['status', 'template', 'source', 'image']:
+        for field in ['status', 'template', 'source', 'image', 'unit']:
             with self.subTest(field=field):
                 v = copy.deepcopy(self.values)
                 record = v['invoice_validation_record']['json']
                 if field == 'status': record['status'] = 'failed'
+                if field == 'unit': record['artifacts']['invoice_validation']['unit'] = False
                 if field == 'template': record['summary_fields']['job_template']['name'] = 'invoice_baseline'
                 if field == 'source': record['artifacts']['invoice_validation']['source_revision'] = 'f' * 40
                 if field == 'image': v['invoice_deploy_template']['json']['results'][0]['execution_environment'] = 99

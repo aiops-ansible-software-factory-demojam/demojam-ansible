@@ -1,0 +1,110 @@
+---
+- name: Run every candidate unit test on disposable RHEL guests with real root ownership
+  hosts: molecule
+  become: true
+  gather_facts: true
+  vars:
+    acceptance_unit_python_packages: >-
+      {{ ['python3', 'python3-pip'] if ansible_facts.distribution_major_version == '10'
+         else ['python3.12', 'python3.12-pip'] }}
+    acceptance_unit_inputs: '{{ lookup("ansible.builtin.env", "INVOICE_UNIT_INPUTS_DIR") }}'
+    acceptance_baseline: >-
+      {{ (lookup('ansible.builtin.file', lookup('ansible.builtin.env', 'INVOICE_MATERIAL_FILE')) | from_json).baseline }}
+  tasks:
+    - name: Require trusted unit inputs and the approved baseline wheel
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.distribution_major_version in ['9', '10']
+          - acceptance_unit_inputs is match('^/')
+          - acceptance_baseline.filename is match('^[A-Za-z0-9_.+-]+[.]whl$')
+          - acceptance_baseline.sha256 is match('^[a-f0-9]{64}$')
+    - name: Check whether the image has cloud-init
+      ansible.builtin.stat:
+        path: /usr/bin/cloud-init
+      register: acceptance_cloud_init
+    - name: Wait for guest initialization before package transactions
+      when: acceptance_cloud_init.stat.exists
+      ansible.builtin.command:
+        argv: [cloud-init, status, --wait]
+      timeout: 300
+      register: acceptance_initialized
+      changed_when: false
+      failed_when: acceptance_initialized.rc not in [0, 2]
+    - name: Install the isolated unit runner prerequisites
+      ansible.builtin.dnf:
+        name: '{{ acceptance_unit_python_packages + ["git", "tar", "gzip"] }}'
+        state: present
+        lock_timeout: 180
+      register: acceptance_unit_packages
+      until: acceptance_unit_packages is succeeded
+      retries: 5
+      delay: 15
+    - name: Allocate a disposable unit workspace
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: invoice-required-units-
+      register: acceptance_unit_directory
+    - name: Execute all required coverage before application convergence
+      block:
+        - name: Create the exact source workspace
+          ansible.builtin.file:
+            path: '{{ acceptance_unit_directory.path }}/source'
+            state: directory
+            mode: '0700'
+        - name: Copy exact tracked candidate source without repository credentials or caches
+          ansible.builtin.unarchive:
+            src: '{{ acceptance_unit_inputs }}/source.tar.gz'
+            dest: '{{ acceptance_unit_directory.path }}/source'
+            mode: 'u=rwX,go='
+        - name: Copy the trusted runner and approved unit inputs
+          ansible.builtin.copy:
+            src: '{{ acceptance_unit_inputs }}/{{ item }}'
+            dest: '{{ acceptance_unit_directory.path }}/{{ item }}'
+            mode: '0600'
+          loop:
+            - run-unit-tests.py
+            - requirements.txt
+            - '{{ acceptance_baseline.filename }}'
+        - name: Independently hash the unit baseline wheel on each test guest
+          ansible.builtin.stat:
+            path: '{{ acceptance_unit_directory.path }}/{{ acceptance_baseline.filename }}'
+            checksum_algorithm: sha256
+          register: acceptance_unit_wheel
+        - name: Require the exact approved baseline bytes for CVE reproduction tests
+          ansible.builtin.assert:
+            that: acceptance_unit_wheel.stat.checksum == acceptance_baseline.sha256
+        - name: Create an isolated test Python environment
+          ansible.builtin.command:
+            argv: [/usr/bin/python3.12, -m, venv, '{{ acceptance_unit_directory.path }}/venv']
+          changed_when: false
+        - name: Install the pinned supported Ansible unit toolchain
+          ansible.builtin.pip:
+            requirements: '{{ acceptance_unit_directory.path }}/requirements.txt'
+            virtualenv: '{{ acceptance_unit_directory.path }}/venv'
+        - name: Install only the verified baseline wheel into the test environment
+          ansible.builtin.pip:
+            name: '{{ acceptance_unit_directory.path }}/{{ acceptance_baseline.filename }}'
+            virtualenv: '{{ acceptance_unit_directory.path }}/venv'
+            extra_args: --no-deps
+        - name: Execute every required unit test without skips or expected failures
+          ansible.builtin.command:
+            argv:
+              - '{{ acceptance_unit_directory.path }}/venv/bin/python'
+              - '{{ acceptance_unit_directory.path }}/run-unit-tests.py'
+              - tests
+            chdir: '{{ acceptance_unit_directory.path }}/source'
+          environment:
+            PATH: '{{ acceptance_unit_directory.path }}/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+            TMPDIR: /opt
+            ANSIBLE_STDOUT_CALLBACK: default
+            ANSIBLE_FORCE_COLOR: 'false'
+          register: acceptance_units
+          changed_when: false
+        - name: Record the complete per-platform unit result
+          ansible.builtin.debug:
+            msg: '{{ acceptance_units.stdout_lines }}'
+      always:
+        - name: Remove all test source wheel and Python environment files
+          ansible.builtin.file:
+            path: '{{ acceptance_unit_directory.path }}'
+            state: absent

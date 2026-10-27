@@ -20,14 +20,14 @@ class PublisherTests(unittest.TestCase):
             'artifacts':{'ci_validation':{'passed':True,'source_revision':sha,'base_revision':base,
                 'suite':'webapp-ci-v2','lint':True,'build':True,'unit':True,'molecule':True,
                 'red':True,'green':True,'durable':True,'feedback':'all passed'}}}
-        fixture={'job':None,'posts':[]}
+        fixture={'job':None,'posts':[],'repository':'demo-owner/ansible-collection-demo.webapp'}
         class Handler(BaseHTTPRequestHandler):
             def send(self, value, status=200):
                 body=json.dumps(value).encode();self.send_response(status);self.send_header('Content-Type','application/json');self.end_headers();self.wfile.write(body)
             def do_GET(self):
                 self.send(fixture['job'] if '/jobs/'in self.path else {'state':'open','merge_base':base,
-                    'head':{'sha':sha,'repo':{'full_name':'demo-owner/ansible-collection-demo.webapp'}},
-                    'base':{'ref':'main','repo':{'full_name':'demo-owner/ansible-collection-demo.webapp'}}})
+                    'head':{'sha':sha,'repo':{'full_name':fixture['repository']}},
+                    'base':{'ref':'main','repo':{'full_name':fixture['repository']}}})
             def do_POST(self):
                 payload=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
                 fixture['posts'].append((self.path,payload,self.headers.get('Sudo')))
@@ -36,8 +36,15 @@ class PublisherTests(unittest.TestCase):
         server=ThreadingHTTPServer(('127.0.0.1',0),Handler)
         worker=threading.Thread(target=server.serve_forever,daemon=True);worker.start()
         try:
-            for case in ['good','failed','missing-durable','wrong-sha','wrong-template','wrong-project']:
+            for case in ['good','failed','missing-durable','wrong-sha','wrong-template','wrong-project','invoice-good','invoice-missing-units']:
                 job=copy.deepcopy(good);fixture['posts']=[];fixture['job']=job
+                repository='demo-owner/ansible-collection-demo.pythonapp'if case.startswith('invoice-')else'demo-owner/ansible-collection-demo.webapp'
+                fixture['repository']=repository
+                if case.startswith('invoice-'):
+                    job['summary_fields']['job_template']['name']='invoice_validate'
+                    job['extra_vars']=json.dumps({'invoice_candidate_sha':sha})
+                    job['artifacts']={'invoice_validation':{'passed':True,'source_revision':sha,'acceptance_suite':'trusted-invoice-v2','backend':'aws'}}
+                    if case=='invoice-good':job['artifacts']['invoice_validation']['unit']=True
                 if case=='failed':job['status']='failed';job['artifacts']['ci_validation'].update(passed=False,feedback='YAML lint failed')
                 if case=='missing-durable':job['artifacts']['ci_validation']['durable']=False
                 if case=='wrong-sha':job['extra_vars']=json.dumps({'webapp_candidate_sha':'c'*40})
@@ -45,7 +52,7 @@ class PublisherTests(unittest.TestCase):
                 if case=='wrong-project':job['summary_fields']['project']['name']='candidate'
                 url=f'http://127.0.0.1:{server.server_port}'
                 result=subprocess.run(['ansible-playbook','-i','localhost,',str(ROOT/'playbooks/ci/publish.yml'),'-e',json.dumps({
-                    'ci_repository':'demo-owner/ansible-collection-demo.webapp','ci_candidate_sha':sha,'ci_pr_number':2,'ci_validation_job_id':101})],
+                    'ci_repository':repository,'ci_candidate_sha':sha,'ci_pr_number':2,'ci_validation_job_id':101})],
                     env=dict(os.environ,FORGEJO_URL=url,FORGEJO_TOKEN='fixture',AAP_HOST=url,AAP_USERNAME='fixture',AAP_PASSWORD='fixture'),
                     text=True,capture_output=True,timeout=60)
                 with self.subTest(case=case):
@@ -54,7 +61,7 @@ class PublisherTests(unittest.TestCase):
                     else:
                         self.assertEqual(result.returncode,0,result.stdout+result.stderr)
                         status=fixture['posts'][0]
-                        self.assertEqual(status[1]['state'],'success'if case=='good'else'failure')
+                        self.assertEqual(status[1]['state'],'success'if case in ['good','invoice-good']else'failure')
                         self.assertEqual(status[2],'demo-reviewer')
                         self.assertIn(f'<!-- demo-ci sha={sha} -->',fixture['posts'][1][1]['body'])
                         if case=='failed':self.assertIn('YAML lint failed',fixture['posts'][1][1]['body'])

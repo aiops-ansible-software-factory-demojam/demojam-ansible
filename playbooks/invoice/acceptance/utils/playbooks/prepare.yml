@@ -1,3 +1,6 @@
 ---
 - name: Prepare molecule instances
   ansible.builtin.import_playbook: david_igou.molecule_provisioners.prepare
+
+- name: Run the complete required unit suite with real root ownership on test guests
+  ansible.builtin.import_playbook: ../../molecule/units.yml

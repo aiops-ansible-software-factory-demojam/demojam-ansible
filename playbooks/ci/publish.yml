@@ -68,7 +68,7 @@
               and ci_proof.red | default(false) | bool and ci_proof.green | default(false) | bool
               and ci_proof.durable | default(false) | bool)
               if ci_is_webapp else (ci_proof.acceptance_suite | default('') == 'trusted-invoice-v2'
-              and ci_proof.backend | default('') == 'aws')) }}
+              and ci_proof.backend | default('') == 'aws' and ci_proof.unit | default(false) | bool)) }}
         - name: Describe completed acceptance without a failure diagnostic
           when: ci_passed | bool
           ansible.builtin.set_fact:

@@ -140,35 +140,12 @@
               - "{{ invoice_validation_directory.path }}/installed"
           changed_when: false
           environment: "{{ invoice_test_environment }}"
-        - name: Create an isolated Python environment for baseline application unit tests
-          ansible.builtin.command:
-            argv: ['{{ ansible_playbook_python }}', -m, venv, --system-site-packages, '{{ invoice_validation_directory.path }}/units']
-          changed_when: false
         - name: Download the trusted baseline wheel for the CVE reproduction unit tests
           ansible.builtin.get_url:
             url: '{{ invoice_validation_material.baseline.url }}'
             dest: '{{ invoice_validation_directory.path }}/{{ invoice_validation_material.baseline.filename }}'
             checksum: 'sha256:{{ invoice_validation_material.baseline.sha256 }}'
             mode: '0600'
-        - name: Install only the verified baseline into the isolated unit environment
-          ansible.builtin.command:
-            argv:
-              - '{{ invoice_validation_directory.path }}/units/bin/python'
-              - -m
-              - pip
-              - install
-              - --no-deps
-              - '{{ invoice_validation_directory.path }}/{{ invoice_validation_material.baseline.filename }}'
-          changed_when: false
-        - name: Run all collection unit tests with the pinned baseline dependency
-          ansible.builtin.command:
-            argv:
-              - '{{ invoice_validation_directory.path }}/units/bin/python'
-              - '{{ playbook_dir }}/../ci/run-unit-tests.py'
-              - tests
-            chdir: '{{ invoice_validation_directory.path }}/source'
-          changed_when: false
-          environment: '{{ invoice_test_environment | combine({"TMPDIR": "/opt"}) }}'
         - name: Exercise every authored Molecule scenario
           ansible.builtin.command:
             argv:
@@ -190,6 +167,28 @@
             src: acceptance/
             dest: "{{ invoice_validation_directory.path }}/acceptance/"
             mode: preserve
+        - name: Export exact tracked source for required unit tests on disposable guests
+          ansible.builtin.command:
+            argv:
+              - git
+              - archive
+              - --format=tar.gz
+              - --output
+              - '{{ invoice_validation_directory.path }}/acceptance/unit-inputs/source.tar.gz'
+              - '{{ invoice_candidate_sha }}'
+            chdir: '{{ invoice_validation_directory.path }}/source'
+          changed_when: false
+        - name: Supply the trusted required-unit runner
+          ansible.builtin.copy:
+            src: '{{ playbook_dir }}/../ci/run-unit-tests.py'
+            dest: '{{ invoice_validation_directory.path }}/acceptance/unit-inputs/run-unit-tests.py'
+            mode: '0644'
+        - name: Supply the already verified baseline wheel to isolated unit environments
+          ansible.builtin.copy:
+            src: '{{ invoice_validation_directory.path }}/{{ invoice_validation_material.baseline.filename }}'
+            dest: '{{ invoice_validation_directory.path }}/acceptance/unit-inputs/{{ invoice_validation_material.baseline.filename }}'
+            remote_src: true
+            mode: '0644'
         - name: Render the trusted entry point for the exact candidate
           ansible.builtin.template:
             src: acceptance/molecule/converge.yml.j2
@@ -207,7 +206,8 @@
             chdir: "{{ invoice_validation_directory.path }}/acceptance"
           changed_when: false
           environment: >-
-            {{ invoice_test_environment | combine({'MOLECULE_GLOB': 'molecule/molecule.yml'}) }}
+            {{ invoice_test_environment | combine({'MOLECULE_GLOB': 'molecule/molecule.yml',
+            'INVOICE_UNIT_INPUTS_DIR': invoice_validation_directory.path ~ '/acceptance/unit-inputs'}) }}
         - name: Require the source to remain clean after the machine tests
           ansible.builtin.command:
             argv:
@@ -234,6 +234,8 @@
             data:
               invoice_validation:
                 passed: true
+                unit: true
+                unit_platforms: [rhel9, rhel10]
                 source_revision: "{{ invoice_checkout.after }}"
                 wheel_sha256: "{{ invoice_validation_material.lightwell.sha256 }}"
                 collection_sha256: "{{ invoice_collection_digest.stat.checksum }}"

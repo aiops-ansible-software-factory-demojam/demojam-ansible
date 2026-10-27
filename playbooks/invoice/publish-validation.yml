@@ -37,7 +37,9 @@
         - name: Derive success only from completed independent acceptance
           ansible.builtin.set_fact:
             invoice_review_passed: >-
-              {{ invoice_review_record.json.status == 'successful' and invoice_review_record.json.artifacts.invoice_validation.passed
+              {{ invoice_review_record.json.status == 'successful' and
+              invoice_review_record.json.artifacts.invoice_validation.unit | default(false) | bool and
+              invoice_review_record.json.artifacts.invoice_validation.passed
               | default(false) | bool and invoice_review_record.json.artifacts.invoice_validation.source_revision
               | default('') == invoice_candidate_sha and invoice_review_record.json.artifacts.invoice_validation.acceptance_suite
               | default('') == 'trusted-invoice-v2' and invoice_review_record.json.artifacts.invoice_validation.backend

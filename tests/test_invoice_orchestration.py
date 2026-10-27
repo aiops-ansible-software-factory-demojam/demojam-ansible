@@ -109,7 +109,7 @@ class ValidationStatusTests(unittest.TestCase):
         self.variables = {'invoice_candidate_sha':'a'*40, 'invoice_review_record':{'json':{
             'summary_fields':{'job_template':{'name':'invoice_validate'},'project':{'name':'demojam-ansible'}},
             'extra_vars':json.dumps({'invoice_candidate_sha':'a'*40}), 'status':'successful',
-            'artifacts':{'invoice_validation':{'passed':True,'source_revision':'a'*40,
+            'artifacts':{'invoice_validation':{'passed':True,'unit':True,'source_revision':'a'*40,
                           'acceptance_suite':'trusted-invoice-v2','backend':'aws'}}}}}
 
     def check(self, expected, passes=True):
@@ -127,11 +127,12 @@ class ValidationStatusTests(unittest.TestCase):
         self.check(True)
 
     def test_failed_or_incomplete_acceptance_cannot_publish_success(self):
-        for failure in ['job','suite','artifact']:
+        for failure in ['job','suite','artifact','unit']:
             with self.subTest(failure=failure):
                 original=copy.deepcopy(self.variables)
                 job=self.variables['invoice_review_record']['json']
                 if failure=='job':job['status']='failed'
+                if failure=='unit':job['artifacts']['invoice_validation']['unit']=False
                 if failure=='suite':job['artifacts']['invoice_validation']['acceptance_suite']='candidate-only'
                 if failure=='artifact':job['artifacts']={}
                 self.check(False)
