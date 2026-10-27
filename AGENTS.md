@@ -26,3 +26,8 @@
 - Read README.md for bootstrap, public SCM, and reset behavior.
 
 - `pythonapp_vm` manages only the separate AWS `pythonapp` host and its `pythonapp-vms` endpoints. Python jobs target `pythonapps` and use `demo.pythonapp`; SELinux/nginx jobs stay on `webapps`. Preserve this separation in inventory, tags and EDA repository routing.
+
+- Guest-provisioning Molecule scenarios must destroy owned test resources before
+  `create` in every test/converge/create/check sequence. Preserve cleanup ownership
+  records and stop on cleanup failure. Controller-only logic fixtures require no
+  test guest. Idempotence is a second converge within one fresh lifecycle.
