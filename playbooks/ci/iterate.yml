@@ -89,14 +89,13 @@
               - ci_author.json.id == ci_author_session
               - ci_author.json.agent_name == 'automation-developer'
               - ci_author.json.title == ('Webapp outage issue ' if ci_web else 'Invoice remediation issue ') ~ (ci_issue_number | string)
-        - name: Identify source-bound feedback already queued for an active author
+        - name: Identify source-bound feedback already delivered to this author
           ansible.builtin.set_fact:
             ci_feedback_marker: '<!-- demo-ci-feedback sha={{ ci_latest.json.head_sha }} -->'
-        - name: Queue failure feedback once for active work or resume the same idle author
+        - name: Deliver failure feedback once per source revision regardless of author activity
           when: >-
-            ci_author.json.status == 'idle' or
-            (ci_author.json.status == 'running' and
-            ci_feedback_marker not in (ci_author.json['items'] | default([]) | to_json))
+            ci_author.json.status in ['idle', 'running'] and
+            ci_feedback_marker not in (ci_author.json['items'] | default([]) | to_json)
           ansible.builtin.uri:
             url: '{{ ci_agent_api }}/v1/sessions/{{ ci_author_session }}/events'
             method: POST

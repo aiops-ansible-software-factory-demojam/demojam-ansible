@@ -83,5 +83,29 @@ class PublisherTests(unittest.TestCase):
         cleaned = module.sanitize({'stderr':framed},{})
         self.assertEqual(cleaned,'\n\nchanged: [rhel9]\n')
 
+    def test_idempotence_feedback_names_second_convergence_task_not_cleanup(self):
+        spec=importlib.util.spec_from_file_location('ci_feedback',ROOT/'playbooks/ci/feedback.py')
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        report = {'stage':'Exercise all authored Molecule scenarios', 'stderr':
+            'INFO nginx ➜ converge: Executing\nTASK [Install nginx] ***\nchanged: [rhel9]\n'
+            'INFO nginx ➜ converge: Executed: Successful\n'
+            'INFO nginx ➜ idempotence: Executing\n'
+            '  │ TASK [Refresh facts]\n  │ ***********\n  │ ok: [rhel9]\n'
+            '  │ TASK [demo.webapp.nginx : Persist SELinux policy for document\n'
+            '  │ root] ***\n  │ changed: [rhel9]\n  │ changed: [rhel10]\n'
+            '  │ PLAY RECAP ***\n  │ rhel9 : ok=14 changed=1 failed=0\n' + 'metadata\n'*2000 +
+            'CRITICAL Idempotence test failed because of the following tasks:\n'
+            'INFO nginx ➜ destroy: Executing\nTASK [Destroy guests] ***\nchanged: [localhost]\n'
+            + 'cleanup successful\n'*2000}
+        feedback = module.sanitize(report,{})
+        self.assertIn('second convergence',feedback)
+        summary=feedback.split('Exercise all authored')[0]
+        self.assertIn('Persist SELinux policy for document root (rhel9, rhel10)',summary)
+        self.assertNotIn('Install nginx',summary)
+        self.assertNotIn('Refresh facts',summary)
+        self.assertNotIn('Destroy guests',summary)
+        self.assertIn('CRITICAL Idempotence test failed',feedback)
+        self.assertLessEqual(len(feedback),6000)
+
 
 if __name__ == '__main__':unittest.main()

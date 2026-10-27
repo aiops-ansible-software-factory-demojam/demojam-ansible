@@ -34,7 +34,9 @@ class IterationTests(unittest.TestCase):
                 elif '/v1/sessions/'in self.path:
                     self.send({'id':session,'agent_name':'automation-developer','title':'Invoice remediation issue 1',
                         'status':'running'if fixture['case']in ['active','already-notified']else'idle',
-                        'items':[{'type':'message','data':{'role':'user','content':'<!-- demo-ci-feedback sha='+('a'*40)+' -->'}}]if fixture['case']=='already-notified'else[]})
+                        'items':[{'type':'message','data':{'role':'user','content':[
+                            {'type':'input_text','text':'<!-- demo-ci-feedback sha='+('a'*40)+' -->'}]}}]
+                        if fixture['case'] in ['already-notified', 'idle-already-notified', 'repaired'] else []})
                 else:raise AssertionError(self.path)
             def do_POST(self):
                 raw=self.rfile.read(int(self.headers['Content-Length']))
@@ -50,7 +52,7 @@ class IterationTests(unittest.TestCase):
             def log_message(self,*args):pass
         server=ThreadingHTTPServer(('127.0.0.1',0),Handler);worker=threading.Thread(target=server.serve_forever,daemon=True);worker.start()
         try:
-            for case in ['no-pr','pending','failure','active','already-notified','repaired','green','existing-failure']:
+            for case in ['no-pr','pending','failure','active','already-notified','idle-already-notified','repaired','green','existing-failure']:
                 fixture.clear();fixture.update(case=case,jobs={},launches=[],events=[],published=False)
                 url=f'http://127.0.0.1:{server.server_port}'
                 values={'ci_repository':'demo-owner/ansible-collection-demo.pythonapp','ci_issue_number':1,'ci_author_session':session,
