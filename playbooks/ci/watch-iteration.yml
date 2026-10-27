@@ -1,0 +1,9 @@
+---
+- name: Reconcile the existing author and current published source
+  ansible.builtin.include_tasks: iterate-tasks.yml
+- name: Finish this watch only for the independently green current head
+  when: ci_latest.json.ci_passed | bool
+  ansible.builtin.meta: end_play
+- name: Wait for progress without another AO workflow activity
+  ansible.builtin.pause:
+    seconds: '{{ ci_watch_delay | default(30) | int }}'

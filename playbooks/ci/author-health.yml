@@ -1,0 +1,32 @@
+---
+- name: Authenticate to check the existing author
+  ansible.builtin.uri:
+    url: '{{ ci_agent_api }}/oauth/token'
+    method: POST
+    url_username: '{{ lookup("ansible.builtin.env", "OMNIGENT_CI_CLIENT_ID") }}'
+    url_password: '{{ lookup("ansible.builtin.env", "OMNIGENT_CI_CLIENT_SECRET") }}'
+    force_basic_auth: true
+    body_format: form-urlencoded
+    body:
+      grant_type: client_credentials
+  register: ci_agent_auth
+  no_log: true
+- name: Read the existing author activity before sending feedback
+  ansible.builtin.uri:
+    url: '{{ ci_agent_api }}/v1/sessions/{{ ci_author_session }}'
+    headers:
+      Authorization: 'Bearer {{ ci_agent_auth.json.access_token }}'
+  register: ci_author
+  no_log: true
+- name: Bind the callback to this incident and author
+  ansible.builtin.assert:
+    that:
+      - ci_author.json.id == ci_author_session
+      - ci_author.json.agent_name == 'automation-developer'
+      - ci_author.json.title == ('Webapp outage issue ' if ci_web else 'Invoice remediation issue ') ~ (ci_issue_number | string)
+- name: Stop unfinished authoring when its existing runner has failed
+  ansible.builtin.assert:
+    that: ci_author.json.status in ['idle', 'running']
+    fail_msg: >-
+      Existing incident author {{ ci_author_session }} is {{ ci_author.json.status }}.
+      Inspect the original runner failure before retrying; no validation or promotion is authorized.

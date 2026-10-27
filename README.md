@@ -429,10 +429,15 @@ and sends source-bound feedback only to the existing author, once per failed
 commit across both active and idle states. It never interrupts or executes candidate code.
 `demo_ci_publish` alone receives the reviewer credential, verifies job/project/SHA
 provenance, and posts a required status and bounded, sanitized PR diagnostics.
-A failed CI verdict permits another authoring attempt, never promotion. AO uses
-a linear loop because this AO version retains skipped conditional branches
-between loop iterations. Retry decisions use ordinary Ansible conditions in
-the CI controller job. Version 2 receipts invalidate earlier incomplete checks.
+A failed CI verdict permits another authoring attempt, never promotion. AO runs
+`demo_ci_watch` as one bounded Controller job, with ordinary Ansible conditions
+for each source-bound iteration. The job stops with an explicit infrastructure
+failure if its existing author disconnects, including before any PR exists.
+`demo_wait_merge` holds the saved PR/SHA and waits for human merge in a separate
+bounded Controller job; changed or closed source stops it immediately. Both jobs
+have a 24-hour limit. Polling inside these jobs preserves AO's Temporal history
+budget instead of recording a new workflow loop every 30 seconds. Version 2
+receipts invalidate earlier incomplete checks.
 
 Bootstrap configures these jobs with a pinned test image and disposable AWS or
 CNV credentials. For an existing installation, publish the trusted controller

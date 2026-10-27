@@ -1,0 +1,33 @@
+---
+- name: Wait for human merge of the independently tested source
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - controller-vars.yml
+  tasks:
+    - name: Require the saved incident and tested PR identity
+      ansible.builtin.assert:
+        that:
+          - ci_repository in ['demo-owner/ansible-collection-demo.webapp', 'demo-owner/ansible-collection-demo.pythonapp']
+          - ci_issue_number | int > 0
+          - ci_pr_number | int > 0
+          - ci_candidate_sha is match('^[a-f0-9]{40}$')
+          - ci_merge_attempts | default(2880) | int > 0
+          - ci_merge_attempts | default(2880) | int <= 2880
+          - ci_merge_delay | default(30) | int >= 0
+          - ci_merge_delay | default(30) | int <= 300
+    - name: Read exact human merge without growing AO workflow history per poll
+      ansible.builtin.uri:
+        url: '{{ ci_merge_gate }}'
+      register: ci_merge
+      until: ci_merge.status != 200 or (ci_merge.json.merged | default(false) | bool)
+      retries: '{{ ci_merge_attempts | default(2880) | int }}'
+      delay: '{{ ci_merge_delay | default(30) | int }}'
+    - name: Publish the exact observed merge identity
+      ansible.builtin.set_stats:
+        data:
+          ci_merge:
+            merged: true
+            source_revision: '{{ ci_candidate_sha }}'
+            pr_number: '{{ ci_pr_number }}'

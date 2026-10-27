@@ -1,0 +1,24 @@
+---
+- name: Watch the existing author until its published source passes independent CI
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - controller-vars.yml
+  tasks:
+    - name: Require a bounded authoring watch
+      ansible.builtin.assert:
+        that:
+          - ci_watch_attempts | default(2880) | int > 0
+          - ci_watch_attempts | default(2880) | int <= 2880
+          - ci_watch_delay | default(30) | int >= 0
+          - ci_watch_delay | default(30) | int <= 300
+    - name: Reconcile author progress inside this single Controller job
+      ansible.builtin.include_tasks: watch-iteration.yml
+      loop: '{{ range(ci_watch_attempts | default(2880) | int) | list }}'
+      loop_control:
+        loop_var: ci_watch_iteration
+        label: '{{ ci_watch_iteration + 1 }}'
+    - name: Stop when the bounded authoring watch expires
+      ansible.builtin.fail:
+        msg: Authoring did not reach independently green CI within the watch bound; inspect the original session and PR.
