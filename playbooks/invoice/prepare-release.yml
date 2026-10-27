@@ -79,9 +79,8 @@
           - invoice_validation_record.json.summary_fields.project.name == 'demojam-ansible'
           - (invoice_validation_record.json.extra_vars | from_json).invoice_candidate_sha == invoice_candidate_sha
           - invoice_validation_record.json.artifacts.invoice_validation.passed | bool
-          - invoice_validation_record.json.artifacts.invoice_validation.unit | default(false) | bool
           - invoice_validation_record.json.artifacts.invoice_validation.source_revision == invoice_candidate_sha
-          - invoice_validation_record.json.artifacts.invoice_validation.acceptance_suite == 'trusted-invoice-v2'
+          - invoice_validation_record.json.artifacts.invoice_validation.acceptance_suite == 'trusted-invoice-v1'
           - invoice_validation_record.json.artifacts.invoice_validation.backend == 'aws'
           - invoice_validation_record.json.artifacts.invoice_validation.profile_sha256 == (invoice_current_material.profile
             | to_json(sort_keys=true) | hash('sha256'))

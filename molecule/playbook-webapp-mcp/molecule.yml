@@ -25,6 +25,36 @@ ansible:
     verify: verify.yml
 scenario:
   name: playbook-webapp-mcp
-  test_sequence: [dependency, syntax, create, prepare, converge, idempotence, verify, destroy]
+  # Every separate provisioning command starts from new, owned test guests.
+  # Idempotence remains a second converge inside the same fresh test lifecycle.
+  create_sequence:
+    - dependency
+    - destroy
+    - create
+    - prepare
+  converge_sequence:
+    - dependency
+    - destroy
+    - create
+    - prepare
+    - converge
+  check_sequence:
+    - dependency
+    - destroy
+    - create
+    - prepare
+    - converge
+    - check
+    - destroy
+  test_sequence:
+    - dependency
+    - syntax
+    - destroy
+    - create
+    - prepare
+    - converge
+    - idempotence
+    - verify
+    - destroy
 verifier:
   name: ansible

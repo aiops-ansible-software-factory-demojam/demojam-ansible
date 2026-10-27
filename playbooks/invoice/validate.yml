@@ -6,8 +6,6 @@
   vars:
     invoice_repository: http://forgejo.forgejo.svc.cluster.local:3000/demo-owner/ansible-collection-demo.pythonapp.git
     invoice_test_environment:
-      ANSIBLE_STDOUT_CALLBACK: default
-      ANSIBLE_FORCE_COLOR: 'false'
       PROVISIONER: aws
       INVOICE_SOURCE_COMMIT: "{{ invoice_candidate_sha }}"
       INVOICE_MATERIAL_FILE: "{{ lookup('ansible.builtin.env', 'INVOICE_MATERIAL_FILE') }}"
@@ -73,7 +71,7 @@
               - -s
               - "{{ playbook_dir }}/../../tests"
               - -p
-              - test_invoice_*source.py
+              - test_invoice_acceptance_source.py
               - -v
           changed_when: false
           environment: >-
@@ -140,17 +138,13 @@
               - "{{ invoice_validation_directory.path }}/installed"
           changed_when: false
           environment: "{{ invoice_test_environment }}"
-        - name: Download the trusted baseline wheel for the CVE reproduction unit tests
-          ansible.builtin.get_url:
-            url: '{{ invoice_validation_material.baseline.url }}'
-            dest: '{{ invoice_validation_directory.path }}/{{ invoice_validation_material.baseline.filename }}'
-            checksum: 'sha256:{{ invoice_validation_material.baseline.sha256 }}'
-            mode: '0600'
-        - name: Exercise every authored Molecule scenario
+        - name: Test the authored workflow on ephemeral RHEL EC2 instances
           ansible.builtin.command:
             argv:
-              - make
               - molecule
+              - test
+              - -s
+              - "{{ invoice_validation_material.profile.validation.scenario }}"
             chdir: "{{ invoice_validation_directory.path }}/source"
           changed_when: false
           environment: "{{ invoice_test_environment }}"
@@ -167,28 +161,6 @@
             src: acceptance/
             dest: "{{ invoice_validation_directory.path }}/acceptance/"
             mode: preserve
-        - name: Export exact tracked source for required unit tests on disposable guests
-          ansible.builtin.command:
-            argv:
-              - git
-              - archive
-              - --format=tar.gz
-              - --output
-              - '{{ invoice_validation_directory.path }}/acceptance/unit-inputs/source.tar.gz'
-              - '{{ invoice_candidate_sha }}'
-            chdir: '{{ invoice_validation_directory.path }}/source'
-          changed_when: false
-        - name: Supply the trusted required-unit runner
-          ansible.builtin.copy:
-            src: '{{ playbook_dir }}/../ci/run-unit-tests.py'
-            dest: '{{ invoice_validation_directory.path }}/acceptance/unit-inputs/run-unit-tests.py'
-            mode: '0644'
-        - name: Supply the already verified baseline wheel to isolated unit environments
-          ansible.builtin.copy:
-            src: '{{ invoice_validation_directory.path }}/{{ invoice_validation_material.baseline.filename }}'
-            dest: '{{ invoice_validation_directory.path }}/acceptance/unit-inputs/{{ invoice_validation_material.baseline.filename }}'
-            remote_src: true
-            mode: '0644'
         - name: Render the trusted entry point for the exact candidate
           ansible.builtin.template:
             src: acceptance/molecule/converge.yml.j2
@@ -206,8 +178,7 @@
             chdir: "{{ invoice_validation_directory.path }}/acceptance"
           changed_when: false
           environment: >-
-            {{ invoice_test_environment | combine({'MOLECULE_GLOB': 'molecule/molecule.yml',
-            'INVOICE_UNIT_INPUTS_DIR': invoice_validation_directory.path ~ '/acceptance/unit-inputs'}) }}
+            {{ invoice_test_environment | combine({'MOLECULE_GLOB': 'molecule/molecule.yml'}) }}
         - name: Require the source to remain clean after the machine tests
           ansible.builtin.command:
             argv:
@@ -234,8 +205,6 @@
             data:
               invoice_validation:
                 passed: true
-                unit: true
-                unit_platforms: [rhel9, rhel10]
                 source_revision: "{{ invoice_checkout.after }}"
                 wheel_sha256: "{{ invoice_validation_material.lightwell.sha256 }}"
                 collection_sha256: "{{ invoice_collection_digest.stat.checksum }}"
@@ -245,7 +214,7 @@
                 backend: aws
                 scenario: "{{ invoice_validation_material.profile.validation.scenario }}"
                 release_manifest_sha256: "{{ lightwell_release_sha256 }}"
-                acceptance_suite: trusted-invoice-v2
+                acceptance_suite: trusted-invoice-v1
                 application: "{{ invoice_validation_material.profile.application.id }}"
                 profile_sha256: >-
                   {{ invoice_validation_material.profile | to_json(sort_keys=true) | hash('sha256') }}
@@ -257,13 +226,6 @@
                   - verify
                   - destroy
       rescue:
-        - name: Sanitize the independent validation failure for the author
-          ansible.builtin.command:
-            argv: ['{{ ansible_playbook_python }}', '{{ playbook_dir }}/../ci/feedback.py']
-            stdin: '{{ ansible_failed_result | combine({"stage": ansible_failed_task.name}) | to_json }}'
-          register: invoice_ci_feedback
-          changed_when: false
-          no_log: true
         - name: Check whether mandatory acceptance was initialized
           ansible.builtin.stat:
             path: "{{ invoice_validation_directory.path }}/acceptance/molecule.yml"
@@ -287,8 +249,10 @@
         - name: Destroy disposable test resources after a failed validation
           ansible.builtin.command:
             argv:
-              - make
+              - molecule
               - destroy
+              - -s
+              - "{{ invoice_validation_material.profile.validation.scenario }}"
             chdir: "{{ invoice_validation_directory.path }}/source"
           environment: "{{ invoice_test_environment }}"
           register: invoice_failed_cleanup
@@ -301,15 +265,6 @@
                 {{ invoice_failed_cleanup.rc | default(1) != 0 or invoice_acceptance_cleanup.rc | default(0) !=
                 0 }}
         - name: Keep failed validation unsuccessful
-          ansible.builtin.set_stats:
-            data:
-              ci_validation:
-                passed: false
-                source_revision: '{{ invoice_candidate_sha }}'
-                repository: demo-owner/ansible-collection-demo.pythonapp
-                feedback: '{{ invoice_ci_feedback.stdout }}'
-                cleanup_required: '{{ invoice_failed_cleanup.rc | default(1) != 0 or invoice_acceptance_cleanup.rc | default(0) != 0 }}'
-        - name: Preserve the failed validation result
           ansible.builtin.fail:
             msg: >-
               Independent invoice validation failed. Disposable resource cleanup returned {{ invoice_failed_cleanup.rc

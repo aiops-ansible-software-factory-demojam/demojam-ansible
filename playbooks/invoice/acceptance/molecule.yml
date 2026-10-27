@@ -13,6 +13,31 @@ ansible:
     converge: converge.yml
     verify: verify.yml
 scenario:
-  test_sequence: [syntax, create, prepare, converge, idempotence, verify, destroy]
+  # Use the provisioner's ownership records to clean up before any new guest.
+  create_sequence:
+    - destroy
+    - create
+    - prepare
+  converge_sequence:
+    - destroy
+    - create
+    - prepare
+    - converge
+  check_sequence:
+    - destroy
+    - create
+    - prepare
+    - converge
+    - check
+    - destroy
+  test_sequence:
+    - syntax
+    - destroy
+    - create
+    - prepare
+    - converge
+    - idempotence
+    - verify
+    - destroy
 verifier:
   name: ansible
