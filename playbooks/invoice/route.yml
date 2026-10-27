@@ -11,16 +11,10 @@
     - name: Read trusted application observations
       ansible.builtin.import_tasks: tasks/read-assessment.yml
     - name: Read independently executed Lightwell discovery
-      ansible.builtin.uri:
-        url: '{{ invoice_review_api }}/jobs/{{ invoice_discovery_job_id }}/'
-        url_username: '{{ invoice_review_username }}'
-        url_password: '{{ invoice_review_password }}'
-        force_basic_auth: true
-        validate_certs: true
-        return_content: true
-      register: invoice_discovery_record
-      no_log: true
-      check_mode: false
+      ansible.builtin.include_tasks: tasks/controller-read.yml
+      vars:
+        controller_read_path: 'jobs/{{ invoice_discovery_job_id }}/'
+        controller_read_register: invoice_discovery_record
     - name: Require successful trusted discovery for the same prepared material
       ansible.builtin.assert:
         that:
@@ -37,16 +31,10 @@
     - name: Select the deterministic response
       ansible.builtin.import_tasks: tasks/route-decision.yml
     - name: Read the configured application source identity
-      ansible.builtin.uri:
-        url: '{{ invoice_review_api }}/projects/?name=invoice-collection&organization__name=demo'
-        url_username: '{{ invoice_review_username }}'
-        url_password: '{{ invoice_review_password }}'
-        force_basic_auth: true
-        validate_certs: true
-        return_content: true
-      register: invoice_response_project
-      no_log: true
-      check_mode: false
+      ansible.builtin.include_tasks: tasks/controller-read.yml
+      vars:
+        controller_read_path: 'projects/?name=invoice-collection&organization__name=demo'
+        controller_read_register: invoice_response_project
     - name: Require an exact configured source revision for any containment execution
       ansible.builtin.assert:
         that:

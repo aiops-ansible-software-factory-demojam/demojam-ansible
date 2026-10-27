@@ -77,7 +77,8 @@ class ReleaseContractTests(unittest.TestCase):
 
     def test_native_approval_belongs_to_this_exact_workflow_and_gate_job(self):
         tasks = yaml.safe_load((ROOT / 'playbooks/invoice/tasks/approval-proof.yml').read_text())
-        tasks = [t for t in tasks if 'ansible.builtin.uri' not in t]
+        tasks = [t for t in tasks if 'ansible.builtin.uri' not in t
+                 and t.get('ansible.builtin.include_tasks') not in ['controller-read.yml', 'tasks/controller-read.yml']]
         contract = {'schema_version': 1, 'source_revision': 'a' * 40}
         v = {'awx_workflow_job_id': 10, 'awx_workflow_job_name': 'invoice_promote', 'awx_job_id': 11,
              'invoice_candidate_sha': 'a' * 40, 'invoice_checked_contract': contract,

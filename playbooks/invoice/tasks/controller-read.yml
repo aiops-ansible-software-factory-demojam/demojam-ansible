@@ -1,0 +1,19 @@
+---
+- name: Read the requested Controller record
+  ansible.builtin.uri:
+    url: '{{ invoice_review_api }}/{{ controller_read_path }}'
+    method: GET
+    url_username: '{{ invoice_review_username }}'
+    url_password: '{{ invoice_review_password }}'
+    force_basic_auth: true
+    validate_certs: true
+    follow_redirects: none
+    return_content: true
+    status_code: 200
+  register: __invoice_controller_read_response
+  no_log: true
+  check_mode: false
+- name: Preserve the named Controller response for the caller
+  ansible.builtin.set_fact:
+    '{{ controller_read_register }}': '{{ __invoice_controller_read_response }}'
+  no_log: true

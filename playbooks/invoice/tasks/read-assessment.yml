@@ -3,16 +3,10 @@
   ansible.builtin.assert:
     that: invoice_assessment_job_id | int > 0
 - name: Read the independently executed application assessment
-  ansible.builtin.uri:
-    url: '{{ invoice_review_api }}/jobs/{{ invoice_assessment_job_id }}/'
-    url_username: '{{ invoice_review_username }}'
-    url_password: '{{ invoice_review_password }}'
-    force_basic_auth: true
-    validate_certs: true
-    return_content: true
-  register: invoice_assessment_record
-  no_log: true
-  check_mode: false
+  ansible.builtin.include_tasks: controller-read.yml
+  vars:
+    controller_read_path: 'jobs/{{ invoice_assessment_job_id }}/'
+    controller_read_register: invoice_assessment_record
 - name: Require trusted successful assessment of the current application profile
   ansible.builtin.assert:
     that:

@@ -13,28 +13,15 @@
           - invoice_approved_wheel_sha256 is match('^[0-9a-f]{64}$')
           - invoice_deployment_workflow_id | int > 0
     - name: Read the actual production workflow
-      ansible.builtin.uri:
-        url: "{{ invoice_review_api }}/workflow_jobs/{{ invoice_deployment_workflow_id }}/"
-        url_username: "{{ invoice_review_username }}"
-        url_password: "{{ invoice_review_password }}"
-        force_basic_auth: true
-        validate_certs: true
-        return_content: true
-      register: invoice_production_workflow
-      no_log: true
-      check_mode: false
+      ansible.builtin.include_tasks: tasks/controller-read.yml
+      vars:
+        controller_read_path: 'workflow_jobs/{{ invoice_deployment_workflow_id }}/'
+        controller_read_register: invoice_production_workflow
     - name: Read the approval and deployment outcomes
-      ansible.builtin.uri:
-        url: >-
-          {{ invoice_review_api }}/workflow_jobs/{{ invoice_deployment_workflow_id }}/workflow_nodes/?page_size=20
-        url_username: "{{ invoice_review_username }}"
-        url_password: "{{ invoice_review_password }}"
-        force_basic_auth: true
-        validate_certs: true
-        return_content: true
-      register: invoice_production_nodes
-      no_log: true
-      check_mode: false
+      ansible.builtin.include_tasks: tasks/controller-read.yml
+      vars:
+        controller_read_path: 'workflow_jobs/{{ invoice_deployment_workflow_id }}/workflow_nodes/?page_size=20'
+        controller_read_register: invoice_production_nodes
     - name: Select the protected workflow nodes
       ansible.builtin.set_fact:
         invoice_production_approval: >-
@@ -91,27 +78,15 @@
       loop_control:
         label: '{{ item.item.identifier }}'
     - name: Read the executed production job
-      ansible.builtin.uri:
-        url: "{{ invoice_review_api }}/jobs/{{ invoice_production_deploy[0].job }}/"
-        url_username: "{{ invoice_review_username }}"
-        url_password: "{{ invoice_review_password }}"
-        force_basic_auth: true
-        validate_certs: true
-        return_content: true
-      register: invoice_production_job
-      no_log: true
-      check_mode: false
+      ansible.builtin.include_tasks: tasks/controller-read.yml
+      vars:
+        controller_read_path: 'jobs/{{ invoice_production_deploy[0].job }}/'
+        controller_read_register: invoice_production_job
     - name: Read the executed production image
-      ansible.builtin.uri:
-        url: '{{ invoice_review_api }}/execution_environments/{{ invoice_production_job.json.execution_environment }}/'
-        url_username: '{{ invoice_review_username }}'
-        url_password: '{{ invoice_review_password }}'
-        force_basic_auth: true
-        validate_certs: true
-        return_content: true
-      register: invoice_production_ee
-      no_log: true
-      check_mode: false
+      ansible.builtin.include_tasks: tasks/controller-read.yml
+      vars:
+        controller_read_path: 'execution_environments/{{ invoice_production_job.json.execution_environment }}/'
+        controller_read_register: invoice_production_ee
     - name: Require execution of the independently tested artifact and source
       ansible.builtin.assert:
         that:

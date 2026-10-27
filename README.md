@@ -385,3 +385,18 @@ application service, and publishes verified containment with `fixed: false`.
 A later approved fixed release restores service through the existing deployment
 role. Only fixed versions with healthy business checks close either incident type.
 No generic OS patching, CME integration or automatic review scheduler is included.
+
+## Controller evidence reads
+
+Invoice review and routing use `playbooks/invoice/tasks/controller-read.yml`
+for single-record Controller GETs. Callers supply `controller_read_path` and
+`controller_read_register`; the helper retains the existing registered response
+shape, so downstream source, project, template, approval and digest assertions
+are unchanged. Requests require certificate validation and HTTP 200, reject
+redirects, run in check mode, and suppress credentials and private responses.
+The trusted guard-job loop keeps its direct `uri` task to preserve Ansible's
+`results` and `item` registration semantics.
+
+The CI job runner and nginx durable-regression harness discussed in issue #9
+are deferred implementation history, not part of the tested `main` baseline.
+This refactor does not introduce those workflows or their dependencies.

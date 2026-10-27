@@ -35,38 +35,20 @@
           - invoice_merged_pr.json.merged | bool
           - invoice_merged_pr.json.head_sha == invoice_candidate_sha
     - name: Read independent AAP validation evidence
-      ansible.builtin.uri:
-        url: '{{ invoice_review_api }}/jobs/{{ invoice_validation_job_id }}/'
-        url_username: '{{ invoice_review_username }}'
-        url_password: '{{ invoice_review_password }}'
-        force_basic_auth: true
-        validate_certs: true
-        return_content: true
-      register: invoice_validation_record
-      no_log: true
-      check_mode: false
+      ansible.builtin.include_tasks: tasks/controller-read.yml
+      vars:
+        controller_read_path: 'jobs/{{ invoice_validation_job_id }}/'
+        controller_read_register: invoice_validation_record
     - name: Read the execution environment used by validation
-      ansible.builtin.uri:
-        url: '{{ invoice_review_api }}/execution_environments/{{ invoice_validation_record.json.execution_environment }}/'
-        url_username: '{{ invoice_review_username }}'
-        url_password: '{{ invoice_review_password }}'
-        force_basic_auth: true
-        validate_certs: true
-        return_content: true
-      register: invoice_validation_ee
-      no_log: true
-      check_mode: false
+      ansible.builtin.include_tasks: tasks/controller-read.yml
+      vars:
+        controller_read_path: 'execution_environments/{{ invoice_validation_record.json.execution_environment }}/'
+        controller_read_register: invoice_validation_ee
     - name: Read the reusable deployment template
-      ansible.builtin.uri:
-        url: '{{ invoice_review_api }}/job_templates/?name=invoice_deploy&organization__name=demo'
-        url_username: '{{ invoice_review_username }}'
-        url_password: '{{ invoice_review_password }}'
-        force_basic_auth: true
-        validate_certs: true
-        return_content: true
-      register: invoice_deploy_template
-      no_log: true
-      check_mode: false
+      ansible.builtin.include_tasks: tasks/controller-read.yml
+      vars:
+        controller_read_path: 'job_templates/?name=invoice_deploy&organization__name=demo'
+        controller_read_register: invoice_deploy_template
     - name: Require exactly one configured deployment template
       ansible.builtin.assert:
         that:

@@ -5,27 +5,15 @@
       - awx_workflow_job_id | default(0) | int > 0
       - awx_workflow_job_name | default('') == 'invoice_contain'
 - name: Read this containment execution
-  ansible.builtin.uri:
-    url: '{{ invoice_review_api }}/workflow_jobs/{{ awx_workflow_job_id }}/'
-    url_username: '{{ invoice_review_username }}'
-    url_password: '{{ invoice_review_password }}'
-    force_basic_auth: true
-    validate_certs: true
-    return_content: true
-  register: invoice_containment_workflow
-  no_log: true
-  check_mode: false
+  ansible.builtin.include_tasks: controller-read.yml
+  vars:
+    controller_read_path: 'workflow_jobs/{{ awx_workflow_job_id }}/'
+    controller_read_register: invoice_containment_workflow
 - name: Read the actual containment approval and gate jobs
-  ansible.builtin.uri:
-    url: '{{ invoice_review_api }}/workflow_jobs/{{ awx_workflow_job_id }}/workflow_nodes/?page_size=20'
-    url_username: '{{ invoice_review_username }}'
-    url_password: '{{ invoice_review_password }}'
-    force_basic_auth: true
-    validate_certs: true
-    return_content: true
-  register: invoice_containment_nodes
-  no_log: true
-  check_mode: false
+  ansible.builtin.include_tasks: controller-read.yml
+  vars:
+    controller_read_path: 'workflow_jobs/{{ awx_workflow_job_id }}/workflow_nodes/?page_size=20'
+    controller_read_register: invoice_containment_nodes
 - name: Select the containment approval and current recheck
   ansible.builtin.set_fact:
     invoice_containment_approval: '{{ invoice_containment_nodes.json.results | selectattr("identifier", "equalto", "containment-approval") | list }}'
