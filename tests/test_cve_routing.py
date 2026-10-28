@@ -72,7 +72,8 @@ class CVERoutingTests(unittest.TestCase):
 
     def test_containment_approval_must_match_this_request_and_gate(self):
         tasks = [t for t in yaml.safe_load((ROOT / 'playbooks/invoice/tasks/containment-approval.yml').read_text())
-                 if 'ansible.builtin.uri' not in t]
+                 if 'ansible.builtin.uri' not in t
+                 and t.get('ansible.builtin.include_tasks') not in ['controller-read.yml', 'tasks/controller-read.yml']]
         response = {'route': 'contain', 'hosts': ['python1'], 'source_revision': 'd' * 40}
         values = {'awx_workflow_job_id': 9, 'awx_workflow_job_name': 'invoice_contain', 'awx_job_id': 12,
             'invoice_router_job_id': 7, 'invoice_trusted_response': response,

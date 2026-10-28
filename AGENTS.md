@@ -17,7 +17,9 @@
 - Use Red Hat ee-supported-rhel9 for playbook syntax checks. Run Ansible lint
   in the development tools environment. Project requirements install public
   Galaxy CaC and the public Git demo collection;
-  certified dependencies come from the supported image. There is no CI.
+  certified dependencies come from the supported image. There is no repository-hosted
+  CI runner. Python independent acceptance runs in AAP and publishes its protected
+  status; nginx uses independent operator validation before merge/recovery.
 - Write block-style YAML with FQCNs and named plays/tasks. Inventory carries
   runtime lookups; content consumes the values.
 - `webapp_vm` manages only webapp in webapp-vms. The generic VM playbook stays
@@ -31,3 +33,29 @@
   `create` in every test/converge/create/check sequence. Preserve cleanup ownership
   records and stop on cleanup failure. Controller-only logic fixtures require no
   test guest. Idempotence is a second converge within one fresh lifecycle.
+
+## Ansible authoring standard
+
+Follow [Red Hat CoP Automation Good Practices](https://redhat-cop.github.io/automation-good-practices/),
+especially role design, coding style, idempotence and check mode. Repository and
+operator requirements still determine application layout and acceptance boundaries.
+
+Prefer an existing built-in or maintained collection module to `command` or
+`shell`; check its interface with `ansible-doc` and declare production collection
+dependencies in `galaxy.yml` when applicable. Use `ansible.builtin.uri` for HTTP
+APIs. Avoid custom modules/plugins when existing modules and straightforward tasks
+are sufficient; document the specific unsupported capability before adding one.
+Keep application details in vars files, not role defaults or inventory.
+
+If a command is necessary, comment why no suitable module covers it, prefer
+`ansible.builtin.command` with `argv`, and provide accurate change detection,
+check-mode behavior and failure handling. Use shell only when shell features are
+required. Never suppress configuration/test errors with `|| true` or unconditional
+`failed_when: false`, and never hide mutations with blanket `changed_when: false`.
+Read-only diagnostic commands can legitimately report no change; classify expected
+nonzero results explicitly and retain unexpected failures.
+
+Keep meaningful regression assertions and the complete Molecule lifecycle,
+including idempotence and verification. Run production-profile lint and all final
+checks; preserve actual nonzero exit codes. Do not weaken tests or discard test
+state to claim success. Report failed or unavailable checks honestly.

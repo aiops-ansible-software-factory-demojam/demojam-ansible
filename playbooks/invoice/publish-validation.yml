@@ -18,16 +18,10 @@
             that:
               - invoice_validation_job_id | default(0) | int > 0
         - name: Read the actual independent validation job
-          ansible.builtin.uri:
-            url: "{{ invoice_review_api }}/jobs/{{ invoice_validation_job_id }}/"
-            url_username: "{{ invoice_review_username }}"
-            url_password: "{{ invoice_review_password }}"
-            force_basic_auth: true
-            validate_certs: true
-            return_content: true
-          register: invoice_review_record
-          no_log: true
-          check_mode: false
+          ansible.builtin.include_tasks: tasks/controller-read.yml
+          vars:
+            controller_read_path: 'jobs/{{ invoice_validation_job_id }}/'
+            controller_read_register: invoice_review_record
         - name: Require the trusted validator and requested source
           ansible.builtin.assert:
             that:

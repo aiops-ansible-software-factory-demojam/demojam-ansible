@@ -3,16 +3,10 @@
   ansible.builtin.assert:
     that: invoice_router_job_id | int > 0
 - name: Read the actual CVE routing execution
-  ansible.builtin.uri:
-    url: '{{ invoice_review_api }}/jobs/{{ invoice_router_job_id }}/'
-    url_username: '{{ invoice_review_username }}'
-    url_password: '{{ invoice_review_password }}'
-    force_basic_auth: true
-    validate_certs: true
-    return_content: true
-  register: invoice_router_record
-  no_log: true
-  check_mode: false
+  ansible.builtin.include_tasks: controller-read.yml
+  vars:
+    controller_read_path: 'jobs/{{ invoice_router_job_id }}/'
+    controller_read_register: invoice_router_record
 - name: Require a trusted routing receipt for the current application policy
   ansible.builtin.assert:
     that:
