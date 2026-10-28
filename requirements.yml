@@ -7,9 +7,9 @@ collections:
   - name: ansible.eda
   - name: amazon.aws
   - name: infra.aap_configuration
-  - name: https://github.com/aiops-ansible-software-factory-demojam/ansible-collection-demo.webapp.git
-    type: git
-    version: main
-  - name: https://github.com/aiops-ansible-software-factory-demojam/ansible-collection-demo.pythonapp.git
-    type: git
-    version: main
+  # - name: https://github.com/aiops-ansible-software-factory-demojam/ansible-collection-demo.webapp.git
+  #   type: git
+  #   version: main
+  # - name: https://github.com/aiops-ansible-software-factory-demojam/ansible-collection-demo.pythonapp.git
+  #   type: git
+  #   version: main
