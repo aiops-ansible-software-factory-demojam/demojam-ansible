@@ -1,26 +1,15 @@
 ---
 collections:
   - name: ansible.posix
-    version: 2.2.2
-    source: https://galaxy.ansible.com
-  # Controller sync isolates its collection cache from the image's collection path.
-  # Copy certified dependencies from ee-supported instead of downloading from Hub.
-  - name: /usr/share/ansible/collections/ansible_collections/ansible/controller
-    type: dir
-  - name: /usr/share/ansible/collections/ansible_collections/ansible/platform
-    type: dir
-  - name: /usr/share/ansible/collections/ansible_collections/ansible/hub
-    type: dir
-  - name: /usr/share/ansible/collections/ansible_collections/ansible/eda
-    type: dir
-  - name: /usr/share/ansible/collections/ansible_collections/amazon/aws
-    type: dir
+  - name: ansible.controller
+  - name: ansible.platform
+  - name: ansible.hub
+  - name: ansible.eda
+  - name: amazon.aws
   - name: infra.aap_configuration
-    version: 4.8.0
-    source: https://galaxy.ansible.com
-  - name: http://forgejo.forgejo.svc.cluster.local:3000/demo-owner/ansible-collection-demo.webapp.git
+  - name: https://github.com/aiops-ansible-software-factory-demojam/ansible-collection-demo.webapp.git
     type: git
     version: main
-  - name: http://forgejo.forgejo.svc.cluster.local:3000/demo-owner/ansible-collection-demo.pythonapp.git
+  - name: https://github.com/aiops-ansible-software-factory-demojam/ansible-collection-demo.pythonapp.git
     type: git
     version: main
