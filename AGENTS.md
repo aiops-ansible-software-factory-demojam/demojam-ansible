@@ -17,7 +17,9 @@
 - Use Red Hat ee-supported-rhel9 for playbook syntax checks. Run Ansible lint
   in the development tools environment. Project requirements install public
   Galaxy CaC and the public Git demo collection;
-  certified dependencies come from the supported image. There is no CI.
+  certified dependencies come from the supported image. There is no repository-hosted
+  CI runner. Python independent acceptance runs in AAP and publishes its protected
+  status; nginx uses independent operator validation before merge/recovery.
 - Write block-style YAML with FQCNs and named plays/tasks. Inventory carries
   runtime lookups; content consumes the values.
 - `webapp_vm` manages only webapp in webapp-vms. The generic VM playbook stays

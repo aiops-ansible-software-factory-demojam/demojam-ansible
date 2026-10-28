@@ -28,7 +28,7 @@ after populating its root `.env` and supplying `aap_manifest.zip`.
    running VMs. Source credentials and VM SSH identity survive reruns.
 
 There is no custom AAP image build or Automation Hub token. Root `requirements.yml`
-installs `infra.aap_configuration` from public Galaxy and `demo.webapp` from
+installs `infra.aap_configuration` from public Galaxy and both application collections from
 public Forgejo Git on project updates. Controller's isolated collection cache
 cannot see the supported image's collection path during installation, so
 `type: dir` entries copy CaC's certified dependencies from that image into the
@@ -75,9 +75,9 @@ job template's execution permission.
 
 For initial demo setup in AAP, launch **webapp_vm**,
 **webapp_selinux_permissive**, then **webapp_nginx**. Bootstrap runs these
-jobs in that order. The VM job clones the
-cluster's `rhel9` DataSource into `webapp-vms` and adds the generated public
-SSH key through cloud-init. The separate setup playbook waits for SSH and
+jobs in that order. The VM job provisions the selected AWS or CNV RHEL 9 guest and installs the
+bootstrap-managed SSH key through cloud-init. CNV clones the `rhel9` DataSource;
+AWS uses the recorded AMI and RHUI repositories. The separate setup playbook waits for SSH and
 sets SELinux to Permissive so the unfixed collection can serve HTTP.
 The nginx job refreshes discovery, waits for SSH,
 enables the entitled RHEL 9 BaseOS/AppStream repositories, and uses
@@ -93,7 +93,8 @@ SELinux still Enforcing. Do not run the permissive setup job during recovery.
 CNV inventory queries only `automation-vms` and `webapp-vms`. The webapp is
 `webapp-webapp-vms` in group `webapps`; its SSH hostname is the internal Service.
 GitOps owns the HTTP/SSH Services, HTTPS Route and blackbox probe. The probe
-becomes healthy once nginx serves HTTP. No automatic CI or schedule is added.
+becomes healthy once nginx serves HTTP. No Forgejo Actions runner or nginx CI schedule is added; Python uses a
+separate AO-coordinated independent AAP validator.
 
 From openshift-gitops, the corresponding commands are:
 
@@ -120,11 +121,13 @@ CirrOS/Fedora examples in `automation-vms`, with `host: demo_cluster` and
 ## Reset
 
 `make demo-reset` in openshift-gitops wipes Forgejo and developer-agent
-sessions, then seeds this starting config and the README feature issue.
-It removes the monitored guest and disposable test guests while preserving AAP
+sessions, then seeds the selected baseline config without a starter README issue. Detection
+creates incident issues only after the applications are ready.
+It removes application guests and disposable test guests while preserving AAP
 and runtime credentials. Run bootstrap afterward to restore the permissive
-unfixed baseline. AWS also preserves its network and selected images. Normal hydration preserves user commits; config changes must be pushed
-to Forgejo before dispatch. Manifest ZIPs and `.env` files are excluded from
+unfixed baselines. AWS also preserves its network and selected images. Normal
+hydration preserves feature branches/PRs but replaces seeded main contents;
+implementation changes must be published before hydration/dispatch. Manifest ZIPs and `.env` files are excluded from
 fixture snapshots.
 
 ## Webapp outage issues
@@ -277,7 +280,7 @@ security issues, independent validation using a scoped EC2 test identity, and
 production workflows bound to a successfully tested collection SHA.
 The Forgejo EDA rule dispatches only newly opened invoice incidents to the
 invoice AO authoring workflow. See the GitOps repository's detailed
-[invoice walkthrough](https://github.com/aiops-ansible-software-factory-demojam/openshift-gitops/blob/feature/lightwell-invoice-demo/docs/invoice-lightwell-demo.md).
+[invoice walkthrough](https://github.com/aiops-ansible-software-factory-demojam/openshift-gitops/blob/fix/portable-collection-artifacts/docs/invoice-lightwell-demo.md).
 
 In the supported Red Hat execution environment, run
 `python3 -m unittest discover -s tests -p test_invoice_configuration.py -v`
@@ -400,3 +403,19 @@ The trusted guard-job loop keeps its direct `uri` task to preserve Ansible's
 The CI job runner and nginx durable-regression harness discussed in issue #9
 are deferred implementation history, not part of the tested `main` baseline.
 This refactor does not introduce those workflows or their dependencies.
+
+## Verified implementation and diagrams
+
+The 2026-10-28 fresh AWS rehearsal completed both application incidents and recovery.
+The trusted automation branch exercised the shared Controller GET helper through
+routing, independent acceptance, release preparation, approval and deployment proof.
+Python's candidate changed its release lock; the reusable deployment and mandatory
+regression/rollback suites were existing content. nginx recovery was independently
+validated and launched by the operator; no native nginx promotion or automatic
+CI-repair controller is included.
+
+See the [current source/validation record](https://github.com/aiops-ansible-software-factory-demojam/openshift-gitops/blob/fix/portable-collection-artifacts/docs/stable-demo-rehearsal.md)
+and [Draw.io architecture and workflow XML](https://github.com/aiops-ansible-software-factory-demojam/openshift-gitops/tree/fix/portable-collection-artifacts/docs/diagrams).
+GitHub source PRs remain separate from ephemeral Forgejo incident PRs. Full resets
+remove application/test guests and Forgejo work; bootstrap must restore both
+baselines before either trigger runs. Retain AAP history and cleanup receipts.
