@@ -247,7 +247,11 @@ To regenerate the dependency lock on Linux x86_64 with Python 3.12, resolve
 `pip install --dry-run --ignore-installed --report report.json`. Record every
 selected package/version with its `download_info.archive_info.hashes.sha256`
 in the lock, then install with `--require-hashes --only-binary=:all:` and rerun
-the checks. Treat a new dependency resolution as a reviewed update.
+the checks. Preserve exact, hashed pins for both `pydantic` and
+`pydantic[email]`: RHEL's pip 23.2 resolves the base and extra separately, so
+omitting either pin can select an unpinned newer release. Validate the lock
+with that guest pip version as well as the development resolver. Treat a new
+dependency resolution as a reviewed update.
 
 Bootstrap also configures a separate authenticated Forgejo event stream and
 the `forgejo-issue-remediation.yml` rulebook. The repository's issue webhook
