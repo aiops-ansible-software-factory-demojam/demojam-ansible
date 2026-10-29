@@ -1,5 +1,5 @@
 ---
-- name: Manage only the nginx web application host
+- name: webapp-launch | Manage only the nginx web application host
   ansible.builtin.import_playbook: application-launch.yml
   vars:
     aws_application_name: webapp

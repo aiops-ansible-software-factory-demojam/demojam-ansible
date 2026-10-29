@@ -1,5 +1,5 @@
 ---
-- name: Validate temporary application containment before and after approval
+- name: prepare-containment | Validate temporary application containment before and after approval
   hosts: localhost
   connection: local
   gather_facts: false
@@ -8,9 +8,9 @@
   vars:
     invoice_response_material: '{{ lookup("ansible.builtin.file", lookup("ansible.builtin.env", "INVOICE_MATERIAL_FILE")) | from_json }}'
   tasks:
-    - name: Read the independent routing decision and assessment
+    - name: prepare-containment | Read the independent routing decision and assessment
       ansible.builtin.import_tasks: tasks/read-response.yml
-    - name: Require the saved containment request to match trusted policy and observations
+    - name: prepare-containment | Require the saved containment request to match trusted policy and observations
       ansible.builtin.assert:
         that:
           - invoice_response == invoice_trusted_response
@@ -21,10 +21,10 @@
           - invoice_response_material.profile.application.inventory_group == 'pythonapps'
           - invoice_response_material.profile.application.service is match('^[A-Za-z0-9_-]+$')
           - invoice_routing_finding.observations | map(attribute='assessment_state') | difference(['affected', 'fixed']) | length == 0
-    - name: Prove this exact native workflow approval before containment
+    - name: prepare-containment | Prove this exact native workflow approval before containment
       when: invoice_require_containment_approval | default(false) | bool
       ansible.builtin.include_tasks: tasks/containment-approval.yml
-    - name: Publish the checked containment request
+    - name: prepare-containment | Publish the checked containment request
       ansible.builtin.set_stats:
         aggregate: false
         data:

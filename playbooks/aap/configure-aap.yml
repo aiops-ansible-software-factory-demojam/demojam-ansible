@@ -1,15 +1,15 @@
 ---
-- name: Configure the demo automation platform
+- name: configure-aap | Configure the demo automation platform
   hosts: aap
   connection: local
   gather_facts: false
   tasks:
-    - name: Load the current Forgejo configuration data
+    - name: configure-aap | Load the current Forgejo configuration data
       ansible.builtin.include_vars:
         dir: ../../inventory/group_vars/aap
       no_log: true
 
-    - name: Check required runtime configuration
+    - name: configure-aap | Check required runtime configuration
       ansible.builtin.assert:
         that:
           - aap_hostname | length > 0
@@ -33,9 +33,9 @@
       no_log: true
 
     # EDA's scheduled shared-resource sync can lag organization creation by 15 minutes.
-    - name: Wait for the bootstrap organization in EDA
+    - name: configure-aap | Wait for the bootstrap organization in EDA
       block:
-        - name: Check EDA organization synchronization
+        - name: configure-aap | Check EDA organization synchronization
           ansible.builtin.uri:
             url: "{{ aap_hostname }}/api/eda/v1/organizations/?name=demo"
             method: GET
@@ -57,14 +57,14 @@
           changed_when: false
           no_log: true
       rescue:
-        - name: Report EDA organization readiness failure
+        - name: configure-aap | Report EDA organization readiness failure
           ansible.builtin.fail:
             msg: >-
               EDA did not expose organization demo within the readiness window.
               Check EDA worker health and gateway shared-resource synchronization,
               then rerun make aap-configure. No config-as-code objects were applied.
 
-    - name: Apply inventory-defined AAP objects
+    - name: configure-aap | Apply inventory-defined AAP objects
       ansible.builtin.include_role:
         name: infra.aap_configuration.dispatch
       vars:
@@ -76,7 +76,7 @@
         aap_configuration_dispatcher_exclude_roles:
           - controller_applications
 
-    - name: Check demo identity inputs
+    - name: configure-aap | Check demo identity inputs
       ansible.builtin.assert:
         that:
           - demo_oidc_issuer | length > 0
@@ -84,7 +84,7 @@
         fail_msg: Run bootstrap to supply the demo identity dispatch credential.
       no_log: true
 
-    - name: Configure the inventory-defined OIDC authenticator
+    - name: configure-aap | Configure the inventory-defined OIDC authenticator
       ansible.platform.authenticator:
         aap_hostname: "{{ aap_hostname }}"
         aap_username: "{{ aap_username }}"
@@ -99,7 +99,7 @@
         state: present
       no_log: true
 
-    - name: Configure the inventory-defined OIDC access mappings
+    - name: configure-aap | Configure the inventory-defined OIDC access mappings
       ansible.platform.authenticator_map:
         aap_hostname: "{{ aap_hostname }}"
         aap_username: "{{ aap_username }}"
@@ -115,7 +115,7 @@
       loop: "{{ demo_oidc_authenticator_maps }}"
       no_log: true
 
-    - name: Configure the authenticated demo event streams
+    - name: configure-aap | Configure the authenticated demo event streams
       ansible.eda.event_stream:
         controller_host: "{{ aap_hostname }}"
         controller_username: "{{ aap_username }}"
@@ -131,7 +131,7 @@
       loop: "{{ demo_eda_event_streams }}"
       no_log: true
 
-    - name: Activate the demo event rulebooks
+    - name: configure-aap | Activate the demo event rulebooks
       ansible.eda.rulebook_activation:
         controller_host: "{{ aap_hostname }}"
         controller_username: "{{ aap_username }}"

@@ -1,5 +1,5 @@
 ---
-- name: Provision or remove the AWS RHEL application
+- name: application-launch | Provision or remove the AWS RHEL application
   hosts: "{{ host | default('openshift_clusters') }}"
   connection: local
   gather_facts: false
@@ -10,7 +10,7 @@
     group/amazon.aws.aws:
       region: "{{ application_aws_config.region }}"
   tasks:
-    - name: Validate the bootstrap-owned guest configuration
+    - name: application-launch | Validate the bootstrap-owned guest configuration
       ansible.builtin.assert:
         that:
           - aws_application_name in ['webapp', 'pythonapp']
@@ -20,7 +20,7 @@
           - application_aws_config.rhel9_ami_id is match('^ami-[a-f0-9]+$')
           - application_aws_config[aws_application_name + '_key_name'] is match('^demojam-dj-[a-f0-9]{12}-' + aws_application_name + '$')
 
-    - name: Find the deployment's monitored guest
+    - name: application-launch | Find the deployment's monitored guest
       amazon.aws.ec2_instance_info:
         filters:
           "tag:demojam:deployment": "{{ application_aws_config.deployment_id }}"
@@ -28,19 +28,19 @@
           instance-state-name: [pending, running, stopping, stopped, shutting-down]
       register: application_aws_existing
 
-    - name: Require an unambiguous monitored host
+    - name: application-launch | Require an unambiguous monitored host
       ansible.builtin.assert:
         that: application_aws_existing.instances | length <= 1
 
-    - name: Provision the RHEL 9 guest
+    - name: application-launch | Provision the RHEL 9 guest
       when: application_aws_state == 'present'
       block:
-        - name: Describe the pinned RHEL 9 image
+        - name: application-launch | Describe the pinned RHEL 9 image
           amazon.aws.ec2_ami_info:
             image_ids: ["{{ application_aws_config.rhel9_ami_id }}"]
           register: application_aws_image
 
-        - name: Start the monitored RHEL 9 instance
+        - name: application-launch | Start the monitored RHEL 9 instance
           amazon.aws.ec2_instance:
             name: "{{ aws_application_name }}"
             image_id: "{{ application_aws_config.rhel9_ami_id }}"
@@ -76,13 +76,13 @@
               instance-state-name: [pending, running, stopping, stopped]
           register: application_aws_guest
 
-        - name: Require the public instance address
+        - name: application-launch | Require the public instance address
           ansible.builtin.assert:
             that:
               - application_aws_guest.instances | length == 1
               - application_aws_guest.instances[0].public_ip_address | default('') | length > 0
 
-        - name: Publish the guest endpoints for the existing Services
+        - name: application-launch | Publish the guest endpoints for the existing Services
           kubernetes.core.k8s:
             state: present
             definition: |
@@ -96,7 +96,7 @@
                   endpointslice.kubernetes.io/managed-by: demojam-aap
               addressType: IPv4
               ports:
-                - name: {{ item.port_name }}
+                - name: application-launch | {{ item.port_name }}
                   protocol: TCP
                   port: {{ item.port }}
               endpoints:
@@ -107,10 +107,10 @@
             - {name: '{{ aws_application_name }}', port_name: http, port: 80}
             - {name: '{{ aws_application_name }}-ssh', port_name: ssh, port: 22}
 
-    - name: Remove the monitored guest
+    - name: application-launch | Remove the monitored guest
       when: application_aws_state == 'absent'
       block:
-        - name: Remove stale guest endpoints
+        - name: application-launch | Remove stale guest endpoints
           kubernetes.core.k8s:
             api_version: discovery.k8s.io/v1
             kind: EndpointSlice
@@ -119,20 +119,20 @@
             state: absent
           loop: ['{{ aws_application_name }}', '{{ aws_application_name }}-ssh']
 
-        - name: Record root disk IDs
+        - name: application-launch | Record root disk IDs
           ansible.builtin.set_fact:
             application_aws_volume_ids: >-
               {{ application_aws_existing.instances | map(attribute='block_device_mappings') | flatten
                  | selectattr('ebs', 'defined') | map(attribute='ebs.volume_id') | list }}
 
-        - name: Terminate the owned instance
+        - name: application-launch | Terminate the owned instance
           amazon.aws.ec2_instance:
             instance_ids: "{{ application_aws_existing.instances | map(attribute='instance_id') | list }}"
             state: absent
             wait: true
           when: application_aws_existing.instances | length > 0
 
-        - name: Verify the root disks were removed
+        - name: application-launch | Verify the root disks were removed
           amazon.aws.ec2_vol_info:
             filters:
               volume-id: "{{ application_aws_volume_ids }}"

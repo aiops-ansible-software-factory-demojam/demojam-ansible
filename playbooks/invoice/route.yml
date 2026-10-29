@@ -1,5 +1,5 @@
 ---
-- name: Route CVE findings using independent evidence and operator policy
+- name: route | Route CVE findings using independent evidence and operator policy
   hosts: localhost
   connection: local
   gather_facts: false
@@ -8,14 +8,14 @@
   vars:
     invoice_response_material: '{{ lookup("ansible.builtin.file", lookup("ansible.builtin.env", "INVOICE_MATERIAL_FILE")) | from_json }}'
   tasks:
-    - name: Read trusted application observations
+    - name: route | Read trusted application observations
       ansible.builtin.import_tasks: tasks/read-assessment.yml
-    - name: Read independently executed Lightwell discovery
+    - name: route | Read independently executed Lightwell discovery
       ansible.builtin.include_tasks: tasks/controller-read.yml
       vars:
         controller_read_path: 'jobs/{{ invoice_discovery_job_id }}/'
         controller_read_register: invoice_discovery_record
-    - name: Require successful trusted discovery for the same prepared material
+    - name: route | Require successful trusted discovery for the same prepared material
       ansible.builtin.assert:
         that:
           - invoice_discovery_record.json.status == 'successful'
@@ -23,24 +23,24 @@
           - invoice_discovery_record.json.summary_fields.project.name == 'demojam-ansible'
           - invoice_discovery_record.json.artifacts.remediation_material_sha256 == (invoice_response_material.profile
             | to_json(sort_keys=true) | hash('sha256'))
-    - name: Check whether discovery confirms the prepared artifact
+    - name: route | Check whether discovery confirms the prepared artifact
       ansible.builtin.set_fact:
         invoice_response_fix_confirmed: >-
           {{ invoice_discovery_record.json.artifacts.remediation_candidates | selectattr('sha256', 'equalto',
           invoice_response_material.lightwell.sha256 | default('')) | list | length > 0 }}
-    - name: Select the deterministic response
+    - name: route | Select the deterministic response
       ansible.builtin.import_tasks: tasks/route-decision.yml
-    - name: Read the configured application source identity
+    - name: route | Read the configured application source identity
       ansible.builtin.include_tasks: tasks/controller-read.yml
       vars:
         controller_read_path: 'projects/?name=invoice-collection&organization__name=demo'
         controller_read_register: invoice_response_project
-    - name: Require an exact configured source revision for any containment execution
+    - name: route | Require an exact configured source revision for any containment execution
       ansible.builtin.assert:
         that:
           - invoice_response_project.json.count == 1
           - invoice_response_project.json.results[0].scm_revision is match('^[0-9a-f]{40}$')
-    - name: Build the public response contract
+    - name: route | Build the public response contract
       ansible.builtin.set_fact:
         invoice_response_contract:
           schema_version: 1
@@ -55,7 +55,7 @@
           cvss_score: '{{ invoice_response_score | float }}'
           review_in_days: '{{ invoice_response_policy.review_in_days | default(30) | int }}'
           affected: '{{ invoice_response_affected | bool }}'
-    - name: Publish the route and its independently derived evidence
+    - name: route | Publish the route and its independently derived evidence
       ansible.builtin.set_stats:
         aggregate: false
         data:

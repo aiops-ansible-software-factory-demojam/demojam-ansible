@@ -1,5 +1,5 @@
 ---
-- name: Collect application observations separately from advisory assessment
+- name: check | Collect application observations separately from advisory assessment
   hosts: "{{ remediation_target_group | default('pythonapps') }}"
   become: true
   gather_facts: false
@@ -10,22 +10,22 @@
     remediation_profile: "{{ remediation_material.profile }}"
     remediation_base_url: "{{ remediation_profile.application.base_url | default('http://127.0.0.1') }}"
   tasks:
-    - name: Observe configured application service state
+    - name: check | Observe configured application service state
       ansible.builtin.service_facts:
       when: remediation_profile.application.service is defined
-    - name: Select availability separately from vulnerability state
+    - name: check | Select availability separately from vulnerability state
       ansible.builtin.set_fact:
         remediation_service_running: >-
           {{ remediation_profile.application.service is not defined or
           ansible_facts.services.get(remediation_profile.application.service ~ '.service', {}).get('state', '') == 'running' }}
-    - name: Read the actual running package identity
+    - name: check | Read the actual running package identity
       ansible.builtin.uri:
         url: >-
           {{ remediation_base_url }}{{ remediation_profile.application.status_path | default("/api/status") }}
         return_content: true
       when: remediation_service_running | bool
       register: invoice_status
-    - name: Read dependency metadata from the actual application Python environment
+    - name: check | Read dependency metadata from the actual application Python environment
       ansible.builtin.command:
         argv:
           - "{{ remediation_profile.application.python_executable }}"
@@ -34,14 +34,14 @@
           - "{{ remediation_profile.package.name }}"
       register: remediation_installed
       changed_when: false
-    - name: Assess the installed dependency using prepared advisory mappings
+    - name: check | Assess the installed dependency using prepared advisory mappings
       ansible.builtin.include_role:
         name: demo.pythonapp.lightwell
         tasks_from: assess
       vars:
         lightwell_material: '{{ remediation_material }}'
         lightwell_installed: '{{ remediation_installed.stdout | from_json }}'
-    - name: Run the configured business checks
+    - name: check | Run the configured business checks
       ansible.builtin.uri:
         url: "{{ remediation_base_url }}{{ item.path }}"
         method: "{{ item.method | default(\"GET\") }}"
@@ -49,7 +49,7 @@
       loop: "{{ remediation_profile.validation.business_checks }}"
       when: remediation_service_running | bool
       register: remediation_business
-    - name: Require successful business processing
+    - name: check | Require successful business processing
       when: remediation_service_running | bool
       ansible.builtin.assert:
         that:
@@ -58,7 +58,7 @@
       loop: "{{ remediation_business.results }}"
       loop_control:
         label: "{{ item.item.path }}"
-    - name: Exercise an optional application-specific regression
+    - name: check | Exercise an optional application-specific regression
       when: remediation_profile.validation.regression is defined and remediation_service_running | bool
       ansible.builtin.uri:
         url: "{{ remediation_base_url }}{{ remediation_profile.validation.regression.path }}"
@@ -66,14 +66,14 @@
         return_content: true
         timeout: 15
       register: invoice_regression
-    - name: Record each host finding without inferring a CVE from a timeout
+    - name: check | Record each host finding without inferring a CVE from a timeout
       ansible.builtin.set_fact:
         remediation_finding: >-
           {{ lightwell_finding | combine({'host': inventory_hostname, 'business_passed': remediation_service_running | bool, 'release':
           invoice_status.json.release | default({}), 'normal': remediation_business.results[0].json | default({}), 'business_checks':
           remediation_business.results | selectattr('json', 'defined') | map(attribute='json') | list, 'regression': invoice_regression.json | default({})})
           }}
-    - name: Require the exact promoted release and successful business regression
+    - name: check | Require the exact promoted release and successful business regression
       when: invoice_expected_source_revision is defined or invoice_expected_wheel_sha256 is defined
       ansible.builtin.assert:
         that:
@@ -89,7 +89,7 @@
           - remediation_profile.validation.regression.text_contains | default('') in remediation_finding.regression.text
             | default('')
         fail_msg: Production verification differs from the independently tested and approved release.
-    - name: Publish the complete host observations for this application
+    - name: check | Publish the complete host observations for this application
       when: inventory_hostname == ansible_play_hosts[0]
       vars:
         remediation_observations: >-

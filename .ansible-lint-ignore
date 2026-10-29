@@ -1,0 +1,3 @@
+# Mocked OpenShift Virtualization modules do not expose real kubevirt_vm args.
+playbooks/openshift_virtualization/virtualmachine-manage.yml args[module]
+playbooks/openshift_virtualization/webapp-launch.yml args[module]

@@ -1,13 +1,13 @@
 ---
-- name: Require the independent assessment job identity
+- name: read-assessment | Require the independent assessment job identity
   ansible.builtin.assert:
     that: invoice_assessment_job_id | int > 0
-- name: Read the independently executed application assessment
+- name: read-assessment | Read the independently executed application assessment
   ansible.builtin.include_tasks: controller-read.yml
   vars:
     controller_read_path: 'jobs/{{ invoice_assessment_job_id }}/'
     controller_read_register: invoice_assessment_record
-- name: Require trusted successful assessment of the current application profile
+- name: read-assessment | Require trusted successful assessment of the current application profile
   ansible.builtin.assert:
     that:
       - invoice_assessment_record.json.status == 'successful'
@@ -16,10 +16,10 @@
       - invoice_assessment_record.json.artifacts.invoice_findings.schema_version == 1
       - invoice_assessment_record.json.artifacts.invoice_findings.profile_sha256 == (invoice_response_material.profile
             | to_json(sort_keys=true) | hash('sha256'))
-- name: Select the independently observed finding
+- name: read-assessment | Select the independently observed finding
   ansible.builtin.set_fact:
     invoice_routing_finding: '{{ invoice_assessment_record.json.artifacts.invoice_findings }}'
-- name: Require complete consistent observations rather than silently excluding hosts
+- name: read-assessment | Require complete consistent observations rather than silently excluding hosts
   ansible.builtin.assert:
     that:
       - invoice_routing_finding.hosts | length > 0

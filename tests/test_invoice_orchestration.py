@@ -41,7 +41,7 @@ class ProductionGateTests(unittest.TestCase):
              'artifacts': {'invoice_release_contract': self.contract}}}
             for identifier in ['validate-release', 'recheck-release']]}
         tasks = yaml.safe_load((ROOT/'playbooks/invoice/verify-deployment.yml').read_text())[0]['tasks']
-        self.tasks = [t for t in tasks if t['name'] in [
+        self.tasks = [t for t in tasks if t['name'].split(' | ', 1)[-1] in [
             'Require successful approval and deployment in the exact release workflow',
             'Require execution of the independently tested artifact and source',
             'Require trusted checks of this exact contract on both sides of approval']]
@@ -103,7 +103,7 @@ class ValidationStatusTests(unittest.TestCase):
     def setUp(self):
         play = yaml.safe_load((ROOT/'playbooks/invoice/publish-validation.yml').read_text())[0]
         block = next(t['block'] for t in play['tasks'] if 'block' in t)
-        self.tasks = [t for t in block if t['name'] in [
+        self.tasks = [t for t in block if t['name'].split(' | ', 1)[-1] in [
             'Require the trusted validator and requested source',
             'Derive success only from completed independent acceptance']]
         self.variables = {'invoice_candidate_sha':'a'*40, 'invoice_review_record':{'json':{

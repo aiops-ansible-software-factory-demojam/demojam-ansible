@@ -1,8 +1,8 @@
 ---
-- name: Read another issue page while results remain
+- name: issue-page | Read another issue page while results remain
   when: remediation_more_pages | bool
   block:
-    - name: Read the next repository issue page
+    - name: issue-page | Read the next repository issue page
       ansible.builtin.uri:
         url: '{{ invoice_issue_url }}?state=all&type=issues&limit=50&page={{ remediation_page }}'
         headers:
@@ -11,7 +11,7 @@
       register: remediation_issue_page
       no_log: true
 
-    - name: Accumulate complete issue history
+    - name: issue-page | Accumulate complete issue history
       ansible.builtin.set_fact:
         remediation_issues: '{{ remediation_issues + remediation_issue_page.json }}'
         remediation_more_pages: '{{ remediation_issue_page.json | length == 50 }}'

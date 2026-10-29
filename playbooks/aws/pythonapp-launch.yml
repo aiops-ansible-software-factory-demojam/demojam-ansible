@@ -1,5 +1,5 @@
 ---
-- name: Manage only the Python application host
+- name: pythonapp-launch | Manage only the Python application host
   ansible.builtin.import_playbook: application-launch.yml
   vars:
     aws_application_name: pythonapp

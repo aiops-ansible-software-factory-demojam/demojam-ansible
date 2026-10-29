@@ -1,24 +1,24 @@
 ---
-- name: Require a native reusable workflow context
+- name: approval-proof | Require a native reusable workflow context
   ansible.builtin.assert:
     that:
       - awx_workflow_job_id | default(0) | int > 0
       - awx_workflow_job_name | default('') == 'invoice_promote'
-- name: Read this promotion execution
+- name: approval-proof | Read this promotion execution
   ansible.builtin.include_tasks: controller-read.yml
   vars:
     controller_read_path: 'workflow_jobs/{{ awx_workflow_job_id }}/'
     controller_read_register: invoice_approval_workflow
-- name: Read the human approval and current gate job
+- name: approval-proof | Read the human approval and current gate job
   ansible.builtin.include_tasks: controller-read.yml
   vars:
     controller_read_path: 'workflow_jobs/{{ awx_workflow_job_id }}/workflow_nodes/?page_size=20'
     controller_read_register: invoice_approval_nodes
-- name: Select the approval and this gate from the execution snapshot
+- name: approval-proof | Select the approval and this gate from the execution snapshot
   ansible.builtin.set_fact:
     invoice_approval_decision: '{{ invoice_approval_nodes.json.results | selectattr("identifier", "equalto", "production-approval") | list }}'
     invoice_approval_gate: '{{ invoice_approval_nodes.json.results | selectattr("identifier", "equalto", "recheck-release") | list }}'
-- name: Require successful human approval of this exact contract and source
+- name: approval-proof | Require successful human approval of this exact contract and source
   ansible.builtin.assert:
     that:
       - invoice_approval_workflow.json.name == 'invoice_promote'

@@ -1,5 +1,5 @@
 ---
-- name: Configure invoice validation and approved promotion
+- name: configure-invoice | Configure invoice validation and approved promotion
   hosts: aap
   connection: local
   gather_facts: false
@@ -7,7 +7,7 @@
     - ../invoice/vars/factory.yml
     - ../invoice/vars/platform.yml
   tasks:
-    - name: Require runtime inputs
+    - name: configure-invoice | Require runtime inputs
       ansible.builtin.assert:
         that:
           - invoice_factory_material is mapping
@@ -16,7 +16,7 @@
           - invoice_factory_test_aws is mapping
           - invoice_factory_test_aws | length > 0
       no_log: true
-    - name: Apply platform AAP resource definitions
+    - name: configure-invoice | Apply platform AAP resource definitions
       ansible.builtin.include_role:
         name: infra.aap_configuration.dispatch
       vars:

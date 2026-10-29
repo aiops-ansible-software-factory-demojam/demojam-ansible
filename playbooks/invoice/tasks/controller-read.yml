@@ -1,5 +1,5 @@
 ---
-- name: Read the requested Controller record
+- name: controller-read | Read the requested Controller record
   ansible.builtin.uri:
     url: '{{ invoice_review_api }}/{{ controller_read_path }}'
     method: GET
@@ -13,7 +13,7 @@
   register: __invoice_controller_read_response
   no_log: true
   check_mode: false
-- name: Preserve the named Controller response for the caller
+- name: controller-read | Preserve the named Controller response for the caller
   ansible.builtin.set_fact:
     '{{ controller_read_register }}': '{{ __invoice_controller_read_response }}'
   no_log: true

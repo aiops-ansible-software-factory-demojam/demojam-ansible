@@ -1,24 +1,24 @@
 ---
-- name: Require the native containment workflow context
+- name: containment-approval | Require the native containment workflow context
   ansible.builtin.assert:
     that:
       - awx_workflow_job_id | default(0) | int > 0
       - awx_workflow_job_name | default('') == 'invoice_contain'
-- name: Read this containment execution
+- name: containment-approval | Read this containment execution
   ansible.builtin.include_tasks: controller-read.yml
   vars:
     controller_read_path: 'workflow_jobs/{{ awx_workflow_job_id }}/'
     controller_read_register: invoice_containment_workflow
-- name: Read the actual containment approval and gate jobs
+- name: containment-approval | Read the actual containment approval and gate jobs
   ansible.builtin.include_tasks: controller-read.yml
   vars:
     controller_read_path: 'workflow_jobs/{{ awx_workflow_job_id }}/workflow_nodes/?page_size=20'
     controller_read_register: invoice_containment_nodes
-- name: Select the containment approval and current recheck
+- name: containment-approval | Select the containment approval and current recheck
   ansible.builtin.set_fact:
     invoice_containment_approval: '{{ invoice_containment_nodes.json.results | selectattr("identifier", "equalto", "containment-approval") | list }}'
     invoice_containment_gate: '{{ invoice_containment_nodes.json.results | selectattr("identifier", "equalto", "recheck-request") | list }}'
-- name: Require approval of this exact containment request
+- name: containment-approval | Require approval of this exact containment request
   ansible.builtin.assert:
     that:
       - invoice_containment_workflow.json.name == 'invoice_contain'

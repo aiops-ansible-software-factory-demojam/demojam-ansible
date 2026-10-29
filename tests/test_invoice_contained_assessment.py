@@ -11,7 +11,7 @@ class ContainedAssessmentTests(unittest.TestCase):
     def check(self, running):
         names = ['Select availability separately from vulnerability state',
                  'Record each host finding without inferring a CVE from a timeout']
-        tasks = [t for t in yaml.safe_load((ROOT / 'playbooks/invoice/check.yml').read_text())[0]['tasks'] if t['name'] in names]
+        tasks = [t for t in yaml.safe_load((ROOT / 'playbooks/invoice/check.yml').read_text())[0]['tasks'] if t['name'].split(' | ', 1)[-1] in names]
         tasks.append({'name': 'Require independent vulnerability and availability evidence', 'ansible.builtin.assert': {'that': [
             'remediation_finding.assessment_state == "affected"',
             'remediation_finding.business_passed == expected_business',

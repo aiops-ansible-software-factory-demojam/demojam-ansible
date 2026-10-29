@@ -1,5 +1,5 @@
 ---
-- name: Call AO Webhook
+- name: call-ao-webhook | Call AO Webhook
   hosts: localhost
   gather_facts: false
 
@@ -8,7 +8,7 @@
 
   tasks:
 
-    - name: Obtain OAuth token
+    - name: call-ao-webhook | Obtain OAuth token
       ansible.builtin.uri:
         url: "{{ ao_webhook_base_url }}/api/v1/auth/token"
         method: POST
@@ -22,7 +22,7 @@
       register: token_response
       no_log: true
 
-    - name: Post event payload to Event-Driven Ansible trigger endpoint
+    - name: call-ao-webhook | Post event payload to Event-Driven Ansible trigger endpoint
       ansible.builtin.uri:
         url: "{{ ao_webhook_base_url }}/api/v1/webhooks/eda/{{ ao_webhook_path }}"
         method: POST
@@ -43,11 +43,11 @@
       register: webhook_response
       no_log: true
 
-    - name: Display execution ID
+    - name: call-ao-webhook | Display execution ID
       ansible.builtin.debug:
         msg: "Workflow execution started: {{ webhook_response.json.execution_id }}"
 
-    - name: Publish the workflow execution as a job artifact
+    - name: call-ao-webhook | Publish the workflow execution as a job artifact
       ansible.builtin.set_stats:
         data:
           ao_execution_id: "{{ webhook_response.json.execution_id }}"

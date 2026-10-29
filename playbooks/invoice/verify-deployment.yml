@@ -1,40 +1,40 @@
 ---
-- name: Require human approval and exact source deployment before verification
+- name: verify-deployment | Require human approval and exact source deployment before verification
   hosts: localhost
   connection: local
   gather_facts: false
   vars_files:
     - vars/orchestration.yml
   tasks:
-    - name: Require an exact release and workflow identity
+    - name: verify-deployment | Require an exact release and workflow identity
       ansible.builtin.assert:
         that:
           - invoice_candidate_sha is match('^[0-9a-f]{40}$')
           - invoice_approved_wheel_sha256 is match('^[0-9a-f]{64}$')
           - invoice_deployment_workflow_id | int > 0
-    - name: Read the actual production workflow
+    - name: verify-deployment | Read the actual production workflow
       ansible.builtin.include_tasks: tasks/controller-read.yml
       vars:
         controller_read_path: 'workflow_jobs/{{ invoice_deployment_workflow_id }}/'
         controller_read_register: invoice_production_workflow
-    - name: Read the approval and deployment outcomes
+    - name: verify-deployment | Read the approval and deployment outcomes
       ansible.builtin.include_tasks: tasks/controller-read.yml
       vars:
         controller_read_path: 'workflow_jobs/{{ invoice_deployment_workflow_id }}/workflow_nodes/?page_size=20'
         controller_read_register: invoice_production_nodes
-    - name: Select the protected workflow nodes
+    - name: verify-deployment | Select the protected workflow nodes
       ansible.builtin.set_fact:
         invoice_production_approval: >-
           {{ invoice_production_nodes.json.results | selectattr('identifier', 'equalto', 'production-approval')
           | list }}
         invoice_production_deploy: >-
           {{ invoice_production_nodes.json.results | selectattr('identifier', 'equalto', 'deploy') | list }}
-    - name: Select both trusted release checks
+    - name: verify-deployment | Select both trusted release checks
       ansible.builtin.set_fact:
         invoice_production_guards: >-
           {{ invoice_production_nodes.json.results | selectattr('identifier', 'in', ['validate-release', 'recheck-release']) | list }}
         invoice_production_contract: '{{ (invoice_production_workflow.json.extra_vars | from_json).invoice_release_contract }}'
-    - name: Require successful approval and deployment in the exact release workflow
+    - name: verify-deployment | Require successful approval and deployment in the exact release workflow
       ansible.builtin.assert:
         that:
           - invoice_production_workflow.json.status == 'successful'
@@ -52,7 +52,7 @@
           - invoice_production_approval[0].summary_fields.job.status == 'successful'
           - invoice_production_deploy[0].summary_fields.job.status == 'successful'
         fail_msg: Approval, deployment or workflow identity is missing or unsuccessful; the incident remains unresolved.
-    - name: Read the executed trusted release checks
+    - name: verify-deployment | Read the executed trusted release checks
       ansible.builtin.uri:
         url: '{{ invoice_review_api }}/jobs/{{ item.job }}/'
         url_username: '{{ invoice_review_username }}'
@@ -66,7 +66,7 @@
       register: invoice_production_guard_records
       no_log: true
       check_mode: false
-    - name: Require trusted checks of this exact contract on both sides of approval
+    - name: verify-deployment | Require trusted checks of this exact contract on both sides of approval
       ansible.builtin.assert:
         that:
           - item.json.status == 'successful'
@@ -77,17 +77,17 @@
       loop: '{{ invoice_production_guard_records.results }}'
       loop_control:
         label: '{{ item.item.identifier }}'
-    - name: Read the executed production job
+    - name: verify-deployment | Read the executed production job
       ansible.builtin.include_tasks: tasks/controller-read.yml
       vars:
         controller_read_path: 'jobs/{{ invoice_production_deploy[0].job }}/'
         controller_read_register: invoice_production_job
-    - name: Read the executed production image
+    - name: verify-deployment | Read the executed production image
       ansible.builtin.include_tasks: tasks/controller-read.yml
       vars:
         controller_read_path: 'execution_environments/{{ invoice_production_job.json.execution_environment }}/'
         controller_read_register: invoice_production_ee
-    - name: Require execution of the independently tested artifact and source
+    - name: verify-deployment | Require execution of the independently tested artifact and source
       ansible.builtin.assert:
         that:
           - invoice_production_job.json.status == 'successful'
@@ -100,7 +100,7 @@
           - invoice_production_job.json.scm_revision == invoice_candidate_sha
           - invoice_production_job.json.artifacts.invoice_release_evidence.passed | bool
           - invoice_production_job.json.artifacts.invoice_release_evidence.release.wheel_sha256 == invoice_approved_wheel_sha256
-    - name: Publish the verified production execution identity
+    - name: verify-deployment | Publish the verified production execution identity
       ansible.builtin.set_stats:
         data:
           invoice_deployment_verified: true

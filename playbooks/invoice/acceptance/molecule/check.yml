@@ -1,8 +1,8 @@
 ---
-- name: Verify the RHEL acceptance matrix
+- name: check | Verify the RHEL acceptance matrix
   ansible.builtin.import_playbook: ../utils/playbooks/verify.yml
 
-- name: Verify installed artifacts and application behavior using trusted policy
+- name: check | Verify installed artifacts and application behavior using trusted policy
   hosts: molecule
   become: true
   gather_facts: false
@@ -11,13 +11,13 @@
     acceptance_profile: '{{ acceptance_material.profile }}'
     acceptance_artifact: '{{ acceptance_material.lightwell }}'
   tasks:
-    - name: Read the running release
+    - name: check | Read the running release
       ansible.builtin.uri:
         url: http://127.0.0.1/api/status
         return_content: true
       register: acceptance_status
 
-    - name: Require the approved package version artifact and reviewed source
+    - name: check | Require the approved package version artifact and reviewed source
       ansible.builtin.assert:
         that:
           - acceptance_status.json.installed.package | lower == acceptance_artifact.package | lower
@@ -26,17 +26,17 @@
           - acceptance_status.json.release.source_revision == lookup('ansible.builtin.env', 'INVOICE_SOURCE_COMMIT')
           - acceptance_status.json.timeout_seconds == 2
 
-    - name: Hash the actual installed wheel on disk
+    - name: check | Hash the actual installed wheel on disk
       ansible.builtin.stat:
         path: '/opt/invoice-portal/current/{{ acceptance_artifact.filename }}'
         checksum_algorithm: sha256
       register: acceptance_wheel
 
-    - name: Require the wheel bytes to match independent approval
+    - name: check | Require the wheel bytes to match independent approval
       ansible.builtin.assert:
         that: acceptance_wheel.stat.checksum == acceptance_artifact.sha256
 
-    - name: Run the mandatory application business checks
+    - name: check | Run the mandatory application business checks
       ansible.builtin.uri:
         url: 'http://127.0.0.1{{ item.path }}'
         method: '{{ item.method | default("GET") }}'
@@ -44,7 +44,7 @@
       loop: '{{ acceptance_profile.validation.business_checks }}'
       register: acceptance_business
 
-    - name: Require the expected business results
+    - name: check | Require the expected business results
       ansible.builtin.assert:
         that:
           - item.json.status == item.item.status
@@ -53,7 +53,7 @@
       loop_control:
         label: '{{ item.item.path }}'
 
-    - name: Exercise the optional mandatory regression
+    - name: check | Exercise the optional mandatory regression
       when: acceptance_profile.validation.regression is defined
       ansible.builtin.uri:
         url: 'http://127.0.0.1{{ acceptance_profile.validation.regression.path }}'
@@ -62,26 +62,26 @@
         timeout: 15
       register: acceptance_regression
 
-    - name: Require successful regression processing
+    - name: check | Require successful regression processing
       when: acceptance_profile.validation.regression is defined
       ansible.builtin.assert:
         that:
           - acceptance_regression.json.status == acceptance_profile.validation.regression.remediated_status
           - acceptance_profile.validation.regression.text_contains | default('') in acceptance_regression.json.text | default('')
 
-    - name: Copy independent invoice acceptance inputs
+    - name: check | Copy independent invoice acceptance inputs
       ansible.builtin.copy:
         src: files/
         dest: /var/tmp/invoice-acceptance/
         mode: '0644'
         directory_mode: '0755'
 
-    - name: Process independently supplied normal and regression documents
+    - name: check | Process independently supplied normal and regression documents
       ansible.builtin.command:
         argv: [/usr/bin/python3.12, /var/tmp/invoice-acceptance/invoice_probe.py]
       changed_when: false
 
-    - name: Read package metadata from the actual deployed Python environment
+    - name: check | Read package metadata from the actual deployed Python environment
       ansible.builtin.command:
         argv:
           - /opt/invoice-portal/current/venv/bin/python
@@ -92,7 +92,7 @@
       changed_when: false
       failed_when: acceptance_installed.stdout | trim != acceptance_artifact.version
 
-    - name: Require enforced SELinux
+    - name: check | Require enforced SELinux
       ansible.builtin.command: getenforce
       register: acceptance_selinux
       changed_when: false
