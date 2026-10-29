@@ -4,8 +4,8 @@
   connection: local
   gather_facts: false
   vars_files:
-    - ../../vars/invoice/factory.yml
-    - ../../vars/invoice/platform.yml
+    - ../invoice/vars/factory.yml
+    - ../invoice/vars/platform.yml
   tasks:
     - name: configure-invoice | Require runtime inputs
       ansible.builtin.assert:

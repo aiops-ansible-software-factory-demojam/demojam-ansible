@@ -96,7 +96,7 @@
                   endpointslice.kubernetes.io/managed-by: demojam-aap
               addressType: IPv4
               ports:
-                - name: application-launch | {{ item.port_name }}
+                - name: {{ item.port_name }}
                   protocol: TCP
                   port: {{ item.port }}
               endpoints:

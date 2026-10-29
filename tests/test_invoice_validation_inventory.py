@@ -15,10 +15,10 @@ ROOT = Path(os.environ.get('DEMO_ANSIBLE_SOURCE', Path(__file__).resolve().paren
 class InvoiceValidationInventoryTests(unittest.TestCase):
     def test_lint_has_local_inventory_without_changing_machine_test_inventory(self):
         play = yaml.safe_load((ROOT / 'playbooks/invoice/validate.yml').read_text())[0]
-        tasks = next(t['block'] for t in play['tasks'] if t['name'] == 'Run independent candidate validation')
-        lint = next(t for t in tasks if t['name'] == 'Lint the candidate invoice automation')
-        inventory = next(t for t in tasks if t['name'] == 'Write an isolated inventory for syntax checks')
-        machine = next(t for t in tasks if t['name'] == 'Test the authored workflow on ephemeral RHEL EC2 instances')
+        tasks = next(t['block'] for t in play['tasks'] if t['name'].split(' | ', 1)[-1] == 'Run independent candidate validation')
+        lint = next(t for t in tasks if t['name'].split(' | ', 1)[-1] == 'Lint the candidate invoice automation')
+        inventory = next(t for t in tasks if t['name'].split(' | ', 1)[-1] == 'Write an isolated inventory for syntax checks')
+        machine = next(t for t in tasks if t['name'].split(' | ', 1)[-1] == 'Test the authored workflow on ephemeral RHEL EC2 instances')
         shared = {'PROVISIONER': 'aws', 'INVOICE_SOURCE_COMMIT': 'a' * 40}
         expression = lint['environment'].removeprefix('{{').removesuffix('}}').strip()
         jinja = Environment(undefined=StrictUndefined)

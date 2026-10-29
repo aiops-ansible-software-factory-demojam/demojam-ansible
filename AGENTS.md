@@ -1,10 +1,14 @@
 # Agent guide
 
-- Shared AAP objects are inventory data under `group_vars/aap/`; apply them through
+- Keep static hosts and backend plugin sources together under `inventory/`, beside
+  `inventory/group_vars/`. The default source is `inventory/hosts.yml`; AAP selects
+  an explicit backend plugin file so unrelated sources are not queried.
+
+- Shared AAP objects are inventory data under `inventory/group_vars/aap/`; apply them through
   `playbooks/aap/configure-aap.yml` and `infra.aap_configuration.dispatch`.
-  Invoice platform and release resources are scoped vars files under `vars/invoice/`,
+  Invoice platform and release resources are scoped vars files under `playbooks/invoice/vars/`,
   applied by `playbooks/aap/configure-invoice.yml` through the same dispatcher.
-  Application details belong in the collection's `vars/invoice.yml`, not inventory
+  Application details belong in the collection's `roles/python_application/vars/invoice.yml`, not inventory
   or an application wrapper role.
 - Bootstrap exclusively owns the demo organization, demo-aap-ee, public
   demojam-ansible project, base demo-inventory and aap group/host,
@@ -15,10 +19,15 @@
   runtime material from the dispatch environment under secure logging. Never
   commit secret values or generate/rotate the source key material here.
 - Use Red Hat ee-supported-rhel9 for playbook syntax checks. Run `ansible-lint --profile production` from the repo root in the development tools environment (`.ansible-lint` excludes installed collections under `.ansible/`; OpenShift Virtualization modules are mocked for local lint). Root `requirements.yml` installs public Galaxy collections and demo application collections from Git; in the demo cluster, swap Git URLs for on-cluster Forgejo mirrors. There is no repository-hosted
-  CI runner. Python independent acceptance runs in AAP and publishes its protected
+  CI runner. Certified AAP and AWS dependencies are directory requirements copied
+  from the supported image into Controller's isolated project collection cache;
+  do not replace them with public Galaxy requirements. Python independent acceptance runs in AAP and publishes its protected
   status; nginx uses independent operator validation before merge/recovery.
 - Write block-style YAML with FQCNs and named plays/tasks. Inventory carries
   runtime lookups; content consumes the values.
+- Apply task-name prefixes only to task and handler display names. Preserve data
+  identifiers, filenames and notification topics; renamed handlers need matching
+  notifications or a stable `listen` topic.
 - `webapp_vm` manages only webapp in webapp-vms. The generic VM playbook stays
   confined to automation-vms. Preserve the `host: demo_cluster` launch variable.
 - Verify cluster identity and current user authorization before live changes.

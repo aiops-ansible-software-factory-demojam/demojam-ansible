@@ -4,17 +4,19 @@
   become: true
   gather_facts: true
   vars:
+    invoice_collection_directory: "{{ lookup('ansible.builtin.env', 'REMEDIATION_CANDIDATE_PLAYBOOK') | dirname | dirname }}"
     invoice_release_channel: baseline
     invoice_execution_revision: "{{ lookup('ansible.builtin.env', 'INVOICE_SOURCE_COMMIT') }}"
   tasks:
     - name: fault-prepare | Install the previous release using the shared deployment contract
       ansible.builtin.include_role:
         name: demo.pythonapp.python_application
+        vars_from: invoice
       vars:
-        # Task vars override the application's vars_files entry, whose
-        # playbook_dir belongs to this independent acceptance playbook.
+        # Resolve assets from the reviewed candidate, even when the role's
+        # installed location or this acceptance playbook lives elsewhere.
         python_application_source: >-
-          {{ lookup('ansible.builtin.env', 'REMEDIATION_CANDIDATE_PLAYBOOK') | dirname }}/../files/invoice/
+          {{ lookup('ansible.builtin.env', 'REMEDIATION_CANDIDATE_PLAYBOOK') | dirname }}/../roles/invoice/files/invoice/
     - name: fault-prepare | Create a canary-only systemd override directory
       when: inventory_hostname == groups['molecule'][0]
       ansible.builtin.file:
@@ -39,4 +41,4 @@
         state: stopped
   vars_files:
     - >-
-      {{ lookup('ansible.builtin.env', 'REMEDIATION_CANDIDATE_PLAYBOOK') | dirname }}/../vars/invoice.yml
+      {{ lookup('ansible.builtin.env', 'REMEDIATION_CANDIDATE_PLAYBOOK') | dirname }}/../roles/invoice/vars/main.yml

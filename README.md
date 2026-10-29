@@ -1,8 +1,24 @@
 # demojam-ansible
 
-This public Forgejo repository follows the homelab `group_vars/aap` and
+This public Forgejo repository follows the homelab `inventory/group_vars/aap` and
 `infra.aap_configuration.dispatch` model. Inventory, AAP object definitions,
 and VM/webapp playbooks share one project. No SCM credential is required.
+
+## Repository layout
+
+| Path | Purpose |
+| --- | --- |
+| `inventory/hosts.yml` | Static AAP and OpenShift control hosts; default in `ansible.cfg` |
+| `inventory/group_vars/` | Variables for AAP, OpenShift and the separate application groups |
+| `inventory/*.aws_ec2.yml` | AWS inventory plugins scoped to webapp or Python application hosts |
+| `inventory/openshift-virtualization.kubevirt.yml` | OpenShift Virtualization inventory plugin |
+| `playbooks/invoice/vars/` | Invoice factory, platform and release-orchestration variables |
+
+AAP selects explicit source files for the requested backend. Keeping static and
+plugin sources beside `group_vars` preserves Ansible's automatic group-variable
+loading. The default inventory loads only `inventory/hosts.yml`; dynamic sources
+are selected by AAP's inventory-source configuration. The previous `dynamic/`
+directory contained these plugin configurations, rather than executable scripts.
 
 ## Bootstrap boundary
 
@@ -19,7 +35,7 @@ after populating its root `.env` and supplying `aap_manifest.zip`.
    `aap_configure_all`. It waits for the public project sync, then launches
    configuration inside AAP. No Resource Operator CRs or connection token
    are needed.
-3. `group_vars/aap` and `infra.aap_configuration.dispatch` exclusively own
+3. `inventory/group_vars/aap` and `infra.aap_configuration.dispatch` exclusively own
    the VM/SSH/RHEL credential types and credentials, SCM inventory sources,
    demo job templates, and EDA credentials/project/decision environment. Gateway OIDC configuration uses the supported
    `ansible.platform` modules. Runtime values arrive through the dispatch
@@ -28,12 +44,12 @@ after populating its root `.env` and supplying `aap_manifest.zip`.
    running VMs. Source credentials and VM SSH identity survive reruns.
 
 There is no custom AAP image build or Automation Hub token. Root `requirements.yml`
-installs `infra.aap_configuration` from public Galaxy, certified controller
-collections from Galaxy, and both application collections from Git. Controller's
-isolated collection cache cannot rely on the supported image's collection path
-during project installation, so Galaxy satisfies those dependencies without Hub
-authentication. The supported image already contains the Virtualization and AWS
-collections and the required Python/system packages.
+installs `infra.aap_configuration` from public Galaxy and both application
+collections from Git. It copies the supported image's Controller, platform, Hub,
+EDA and AWS collections into Controller's isolated project collection cache using
+directory requirements. This avoids resolving certified collections from public
+Galaxy or requiring Hub authentication. Run project sync in the supported image,
+which also provides the Virtualization collection and required Python/system packages.
 
 Git collection URLs default to the public GitHub mirrors listed in each
 collection's `galaxy.yml`. In the demo cluster, replace those entries with
@@ -62,7 +78,7 @@ times out, the job fails with a synchronization message before applying
 config-as-code objects. Check EDA worker health and gateway synchronization,
 then rerun `make aap-configure`.
 
-`group_vars/aap/oidc.yml` defines the independent demo Keycloak authenticator
+`inventory/group_vars/aap/oidc.yml` defines the independent demo Keycloak authenticator
 and access maps. Bootstrap adds `DEMO_OIDC_ISSUER` and
 `DEMO_OIDC_CLIENT_SECRET` to the runtime dispatch credential; these values
 are required when running `configure-aap.yml`. The supported EE's
@@ -133,7 +149,7 @@ fixture snapshots.
 
 ## Webapp outage issues
 
-`group_vars/aap/eda.yml` configures the authenticated Alertmanager event stream
+`inventory/group_vars/aap/eda.yml` configures the authenticated Alertmanager event stream
 and activation. The supported `ansible.eda` modules apply the static stream
 UUID and activation source mapping after dispatch. Project updates restart the
 activation so updated rulebooks take effect.
@@ -147,7 +163,7 @@ is unavailable, then uses text-only RCA. One completed diagnosis reaches
 `webapp_alert_issue` with the original alert.
 The workflow and the policy allowing AAP to reach AO are in openshift-gitops.
 
-The issue destination is fixed in `group_vars/aap/webapp_issue.yml`: Forgejo collection repository
+The issue destination is fixed in `inventory/group_vars/aap/webapp_issue.yml`: Forgejo collection repository
 `demo-owner/ansible-collection-demo.webapp`. Its credential injects `FORGEJO_API_TOKEN`
 only into the issue job. Existing open outage issues are reused; template
 execution is serialized. Resolved notifications do not close issues.
@@ -274,9 +290,9 @@ after a test-gated merge, with SELinux still enforcing.
 
 The optional invoice scenario is configured by
 `playbooks/aap/configure-invoice.yml` and vars files under
-`vars/invoice`. AAP resource definitions are applied through the pinned
+`playbooks/invoice/vars`. AAP resource definitions are applied through the pinned
 `infra.aap_configuration.dispatch` role. Application settings live in the
-collection's `vars/invoice.yml`, consumed directly by `python_application`. It adds application observation, deduplicated
+collection's `roles/python_application/vars/invoice.yml`, consumed directly by `python_application`. It adds application observation, deduplicated
 security issues, independent validation using a scoped EC2 test identity, and
 production workflows bound to a successfully tested collection SHA.
 The Forgejo EDA rule dispatches only newly opened invoice incidents to the
@@ -296,7 +312,7 @@ the missing-inventory failure and check that the isolated inventory fixes it.
 
 Before provisioning test guests, the validator runs the trusted acceptance source
 contract against the exact candidate checkout. This exercises Ansible's variable
-precedence and checks that rollback baseline preparation reads `files/invoice`
+precedence and checks that rollback baseline preparation reads `roles/invoice/files/invoice`
 from that collection. The acceptance task supplies its source override at task
 scope so the application's vars file cannot redirect it to the acceptance directory.
 Run `python3 -m unittest discover -s tests -p test_invoice_acceptance_source.py -v`

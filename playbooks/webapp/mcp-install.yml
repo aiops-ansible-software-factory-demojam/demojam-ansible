@@ -4,14 +4,16 @@
   become: true
   gather_facts: true
   vars_files:
-    - ../../group_vars/webapps.yml
+    - ../../inventory/group_vars/webapps.yml
   handlers:
     - name: mcp-install | Reload audit configuration
+      listen: Reload audit configuration
       # RHEL requires the service command for auditd signal handling.
       ansible.builtin.command:
         argv: [service, auditd, reload]
       changed_when: true
     - name: mcp-install | Restart webapp MCP
+      listen: Restart webapp MCP
       ansible.builtin.systemd_service:
         name: webapp-mcp
         daemon_reload: true
@@ -196,13 +198,13 @@
             group: mcpdiag
             mode: '0640'
           loop:
-            - name: mcp-install | jwt-ca.crt
+            - name: jwt-ca.crt
               content: "{{ webapp_mcp_system_ca.content | b64decode }}\n{{ webapp_mcp_material_lookup.jwt_ca }}"
-            - name: mcp-install | tls.crt
+            - name: tls.crt
               content: "{{ webapp_mcp_material_lookup.tls_cert }}"
-            - name: mcp-install | tls.key
+            - name: tls.key
               content: "{{ webapp_mcp_material_lookup.tls_key }}"
-            - name: mcp-install | ca.crt
+            - name: ca.crt
               content: "{{ webapp_mcp_material_lookup.ca_cert }}"
           no_log: true
           notify: Restart webapp MCP

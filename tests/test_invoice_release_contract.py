@@ -35,7 +35,7 @@ class ReleaseContractTests(unittest.TestCase):
                     'release_manifest_sha256': 'd' * 64}}}},
         }
         source = yaml.safe_load((ROOT / 'playbooks/invoice/prepare-release.yml').read_text())[0]['tasks']
-        self.tasks = [t for t in source if 'ansible.builtin.assert' in t or t['name'] == 'Construct the public immutable release contract']
+        self.tasks = [t for t in source if 'ansible.builtin.assert' in t or t['name'].split(' | ', 1)[-1] == 'Construct the public immutable release contract']
 
     def run_gate(self, values, passes, tasks=None):
         with tempfile.TemporaryDirectory() as directory:

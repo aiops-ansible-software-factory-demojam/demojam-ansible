@@ -45,17 +45,17 @@
                 memory: "{{ vm_memory }}"
             devices:
               disks:
-                - name: virtualmachine-manage | rootdisk
+                - name: rootdisk
                   disk:
                     bus: virtio
-                - name: virtualmachine-manage | cloudinitdisk
+                - name: cloudinitdisk
                   disk:
                     bus: virtio
               interfaces:
-                - name: virtualmachine-manage | default
+                - name: default
                   masquerade: {}
           networks:
-            - name: virtualmachine-manage | default
+            - name: default
               pod: {}
           volumes: "{{ vm_volumes[vm_disk_source] }}"
         wait: true
@@ -75,17 +75,17 @@
                     storage: "{{ vm_disk_size }}"
         vm_volumes:
           containerdisk:
-            - name: virtualmachine-manage | rootdisk
+            - name: rootdisk
               containerDisk:
                 image: "{{ vm_container_image }}"
-            - name: virtualmachine-manage | cloudinitdisk
+            - name: cloudinitdisk
               cloudInitNoCloud:
                 userData: "{{ vm_user_data }}"
           datasource:
-            - name: virtualmachine-manage | rootdisk
+            - name: rootdisk
               dataVolume:
                 name: "{{ vm_name }}-rootdisk"
-            - name: virtualmachine-manage | cloudinitdisk
+            - name: cloudinitdisk
               cloudInitNoCloud:
                 userData: "{{ vm_user_data }}"
       when: vm_state == 'present'

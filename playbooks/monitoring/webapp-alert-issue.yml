@@ -6,7 +6,7 @@
   tasks:
     - name: webapp-alert-issue | Load the issue destination and credential lookup
       ansible.builtin.include_vars:
-        file: ../../group_vars/aap/webapp_issue.yml
+        file: ../../inventory/group_vars/aap/webapp_issue.yml
       no_log: true
 
     - name: webapp-alert-issue | Validate the incoming Alertmanager notification
