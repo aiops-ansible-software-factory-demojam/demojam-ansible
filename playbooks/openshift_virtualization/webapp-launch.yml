@@ -59,23 +59,23 @@
                 memory: 2Gi
             devices:
               disks:
-                - name: webapp-launch | rootdisk
+                - name: rootdisk
                   disk:
                     bus: virtio
-                - name: webapp-launch | cloudinitdisk
+                - name: cloudinitdisk
                   disk:
                     bus: virtio
               interfaces:
-                - name: webapp-launch | default
+                - name: default
                   masquerade: {}
           networks:
-            - name: webapp-launch | default
+            - name: default
               pod: {}
           volumes:
-            - name: webapp-launch | rootdisk
+            - name: rootdisk
               dataVolume:
                 name: webapp-rootdisk
-            - name: webapp-launch | cloudinitdisk
+            - name: cloudinitdisk
               cloudInitNoCloud:
                 userData: "#cloud-config\n{{ webapp_user_data | to_nice_yaml }}"
         wait: true

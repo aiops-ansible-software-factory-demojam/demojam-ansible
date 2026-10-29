@@ -44,12 +44,12 @@ after populating its root `.env` and supplying `aap_manifest.zip`.
    running VMs. Source credentials and VM SSH identity survive reruns.
 
 There is no custom AAP image build or Automation Hub token. Root `requirements.yml`
-installs `infra.aap_configuration` from public Galaxy, certified controller
-collections from Galaxy, and both application collections from Git. Controller's
-isolated collection cache cannot rely on the supported image's collection path
-during project installation, so Galaxy satisfies those dependencies without Hub
-authentication. The supported image already contains the Virtualization and AWS
-collections and the required Python/system packages.
+installs `infra.aap_configuration` from public Galaxy and both application
+collections from Git. It copies the supported image's Controller, platform, Hub,
+EDA and AWS collections into Controller's isolated project collection cache using
+directory requirements. This avoids resolving certified collections from public
+Galaxy or requiring Hub authentication. Run project sync in the supported image,
+which also provides the Virtualization collection and required Python/system packages.
 
 Git collection URLs default to the public GitHub mirrors listed in each
 collection's `galaxy.yml`. In the demo cluster, replace those entries with

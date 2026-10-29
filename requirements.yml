@@ -3,16 +3,18 @@ collections:
   - name: ansible.posix
     version: 2.2.2
     source: https://galaxy.ansible.com
-  - name: ansible.controller
-    source: https://galaxy.ansible.com
-  - name: ansible.platform
-    source: https://galaxy.ansible.com
-  - name: ansible.hub
-    source: https://galaxy.ansible.com
-  - name: ansible.eda
-    source: https://galaxy.ansible.com
-  - name: amazon.aws
-    source: https://galaxy.ansible.com
+  # Controller sync isolates its collection cache from the image's collection path.
+  # Copy the supported image's dependencies instead of resolving them from Galaxy.
+  - name: /usr/share/ansible/collections/ansible_collections/ansible/controller
+    type: dir
+  - name: /usr/share/ansible/collections/ansible_collections/ansible/platform
+    type: dir
+  - name: /usr/share/ansible/collections/ansible_collections/ansible/hub
+    type: dir
+  - name: /usr/share/ansible/collections/ansible_collections/ansible/eda
+    type: dir
+  - name: /usr/share/ansible/collections/ansible_collections/amazon/aws
+    type: dir
   - name: infra.aap_configuration
     version: 4.8.0
     source: https://galaxy.ansible.com
