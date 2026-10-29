@@ -1,26 +1,26 @@
 ---
-- name: Prepare the demo RHEL host for nginx deployment
+- name: nginx-install | Prepare the demo RHEL host for nginx deployment
   hosts: webapps
   become: true
   gather_facts: false
   vars_files:
     - ../../group_vars/webapps.yml
   pre_tasks:
-    - name: Wait for cloud-init SSH access
+    - name: nginx-install | Wait for cloud-init SSH access
       ansible.builtin.wait_for_connection:
         timeout: 600
 
-    - name: Gather the guest operating system facts
+    - name: nginx-install | Gather the guest operating system facts
       ansible.builtin.setup:
 
-    - name: Require RHEL 9 and its runtime entitlement
+    - name: nginx-install | Require RHEL 9 and its runtime entitlement
       ansible.builtin.assert:
         that:
           - ansible_facts['distribution'] == 'RedHat'
           - ansible_facts['distribution_major_version'] == '9'
           - demo_backend == 'aws' or rhel_entitlement_file_lookup | length > 0
 
-    - name: Install the manifest's CDN entitlement
+    - name: nginx-install | Install the manifest's CDN entitlement
       when: demo_backend == 'cnv'
       ansible.builtin.copy:
         src: "{{ rhel_entitlement_file_lookup }}"
@@ -30,7 +30,7 @@
         mode: '0600'
       no_log: true
 
-    - name: Enable the entitled RHEL 9 package repositories
+    - name: nginx-install | Enable the entitled RHEL 9 package repositories
       when: demo_backend == 'cnv'
       ansible.builtin.yum_repository:
         name: "aap-demo-{{ item }}"
@@ -48,5 +48,5 @@
         - baseos
         - appstream
 
-- name: Deploy the collection-owned web application
+- name: nginx-install | Deploy the collection-owned web application
   ansible.builtin.import_playbook: demo.webapp.deploy_webapp

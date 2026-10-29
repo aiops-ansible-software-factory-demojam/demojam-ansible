@@ -1,5 +1,5 @@
 ---
-- name: Reconcile a finding into a deduplicated application remediation ticket
+- name: open-issue | Reconcile a finding into a deduplicated application remediation ticket
   hosts: localhost
   connection: local
   gather_facts: false
@@ -7,7 +7,7 @@
     invoice_issue_url: 'http://forgejo.forgejo.svc.cluster.local:3000/api/v1/repos/{{ invoice_findings.application_profile.repository }}/issues'
     invoice_issue_marker: '<!-- remediation:{{ invoice_findings.incident_key }} -->'
   tasks:
-    - name: Require a structured finding from trusted assessment
+    - name: open-issue | Require a structured finding from trusted assessment
       ansible.builtin.assert:
         that:
           - invoice_findings.schema_version == 1
@@ -15,41 +15,41 @@
           - invoice_findings.application_profile.repository is match('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')
           - invoice_findings.advisory_evidence | length > 0
 
-    - name: Initialize paginated issue reconciliation
+    - name: open-issue | Initialize paginated issue reconciliation
       ansible.builtin.set_fact:
         remediation_issues: []
         remediation_more_pages: true
 
-    - name: Read issue history without silently truncating it
+    - name: open-issue | Read issue history without silently truncating it
       ansible.builtin.include_tasks: tasks/issue-page.yml
       loop: '{{ range(1, 101) | list }}'
       loop_control:
         loop_var: remediation_page
 
-    - name: Refuse a truncated issue history
+    - name: open-issue | Refuse a truncated issue history
       ansible.builtin.assert:
         that: not remediation_more_pages | bool
         fail_msg: Repository issue history exceeds the configured 5000-item reconciliation bound.
 
-    - name: Match this application environment package and advisory identity
+    - name: open-issue | Match this application environment package and advisory identity
       ansible.builtin.set_fact:
         remediation_matches: "{{ remediation_issues | selectattr('body', 'search', invoice_issue_marker) | list }}"
       no_log: true
 
-    - name: Find an existing open incident
+    - name: open-issue | Find an existing open incident
       ansible.builtin.set_fact:
         remediation_open_matches: "{{ remediation_matches | selectattr('state', 'equalto', 'open') | list }}"
 
-    - name: Find security response records for the same incident identity
+    - name: open-issue | Find security response records for the same incident identity
       ansible.builtin.set_fact:
         remediation_response_matches: >-
           {{ remediation_issues | selectattr('body', 'search', '<!-- security-response:' ~ invoice_findings.incident_key ~ ' -->')
           | selectattr('state', 'equalto', 'open') | list }}
-    - name: Refuse ambiguous open incidents
+    - name: open-issue | Refuse ambiguous open incidents
       ansible.builtin.assert:
         that: remediation_open_matches | length <= 1
 
-    - name: Create a repeatable release authoring ticket when a supported fix exists
+    - name: open-issue | Create a repeatable release authoring ticket when a supported fix exists
       when:
         - invoice_findings.affected | bool
         - invoice_findings.fix_available | bool
@@ -91,7 +91,7 @@
       register: invoice_created_issue
       no_log: true
 
-    - name: Refresh evidence on an existing open incident
+    - name: open-issue | Refresh evidence on an existing open incident
       when:
         - invoice_findings.affected | bool
         - remediation_open_matches | length == 1
@@ -111,7 +111,7 @@
         status_code: [200, 201]
       no_log: true
 
-    - name: Close an open incident only after observing a configured fixed version
+    - name: open-issue | Close an open incident only after observing a configured fixed version
       when:
         - not invoice_findings.affected | bool
         - invoice_findings.assessment_state == 'fixed'
@@ -134,7 +134,7 @@
         status_code: [200, 201]
       no_log: true
 
-    - name: Publish ticket reconciliation outcome
+    - name: open-issue | Publish ticket reconciliation outcome
       ansible.builtin.set_stats:
         data:
           remediation_incident_key: '{{ invoice_findings.incident_key }}'

@@ -1,10 +1,10 @@
 ---
-- name: Manage a demo OpenShift Virtualization VM
+- name: virtualmachine-manage | Manage a demo OpenShift Virtualization VM
   hosts: "{{ host | default('openshift_clusters') }}"
   connection: local
   gather_facts: false
   tasks:
-    - name: Validate VM inputs
+    - name: virtualmachine-manage | Validate VM inputs
       ansible.builtin.assert:
         that:
           - vm_namespace == 'automation-vms'
@@ -15,7 +15,7 @@
           - vm_cpus | int > 0
         fail_msg: Use a valid VM name, state, and disk source in automation-vms.
 
-    - name: Remove the VirtualMachine and its owned resources
+    - name: virtualmachine-manage | Remove the VirtualMachine and its owned resources
       redhat.openshift_virtualization.kubevirt_vm:
         name: "{{ vm_name }}"
         namespace: "{{ vm_namespace }}"
@@ -26,7 +26,7 @@
         wait_timeout: "{{ vm_wait_timeout }}"
       when: vm_state == 'absent'
 
-    - name: Create or update the VirtualMachine
+    - name: virtualmachine-manage | Create or update the VirtualMachine
       redhat.openshift_virtualization.kubevirt_vm:
         name: "{{ vm_name }}"
         namespace: "{{ vm_namespace }}"
@@ -45,17 +45,17 @@
                 memory: "{{ vm_memory }}"
             devices:
               disks:
-                - name: rootdisk
+                - name: virtualmachine-manage | rootdisk
                   disk:
                     bus: virtio
-                - name: cloudinitdisk
+                - name: virtualmachine-manage | cloudinitdisk
                   disk:
                     bus: virtio
               interfaces:
-                - name: default
+                - name: virtualmachine-manage | default
                   masquerade: {}
           networks:
-            - name: default
+            - name: virtualmachine-manage | default
               pod: {}
           volumes: "{{ vm_volumes[vm_disk_source] }}"
         wait: true
@@ -75,17 +75,17 @@
                     storage: "{{ vm_disk_size }}"
         vm_volumes:
           containerdisk:
-            - name: rootdisk
+            - name: virtualmachine-manage | rootdisk
               containerDisk:
                 image: "{{ vm_container_image }}"
-            - name: cloudinitdisk
+            - name: virtualmachine-manage | cloudinitdisk
               cloudInitNoCloud:
                 userData: "{{ vm_user_data }}"
           datasource:
-            - name: rootdisk
+            - name: virtualmachine-manage | rootdisk
               dataVolume:
                 name: "{{ vm_name }}-rootdisk"
-            - name: cloudinitdisk
+            - name: virtualmachine-manage | cloudinitdisk
               cloudInitNoCloud:
                 userData: "{{ vm_user_data }}"
       when: vm_state == 'present'

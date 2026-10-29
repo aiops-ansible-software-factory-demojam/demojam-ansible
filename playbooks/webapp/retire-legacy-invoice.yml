@@ -1,13 +1,13 @@
 ---
-- name: Retire the former invoice service only from nginx application hosts
+- name: retire-legacy-invoice | Retire the former invoice service only from nginx application hosts
   hosts: webapps
   become: true
   gather_facts: false
   tasks:
-    - name: Discover legacy services without changing application releases
+    - name: retire-legacy-invoice | Discover legacy services without changing application releases
       ansible.builtin.service_facts:
 
-    - name: Stop the legacy invoice unit on the nginx host
+    - name: retire-legacy-invoice | Stop the legacy invoice unit on the nginx host
       ansible.builtin.systemd_service:
         name: invoice-portal
         state: stopped

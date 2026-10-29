@@ -1,12 +1,12 @@
 ---
-- name: Gather compact audit facts from the impacted host
+- name: pull-audit-logs | Gather compact audit facts from the impacted host
   hosts: webapps
   gather_facts: false
 
   tasks:
 
     # A pipeline is required to bound recent matching entries on the guest.
-    - name: Retrieve recent matching audit entries without logging their contents
+    - name: pull-audit-logs | Retrieve recent matching audit entries without logging their contents
       ansible.builtin.shell:
         cmd: >-
           set -o pipefail && grep -F -- {{ check_audit_service_issue | default('nginx', true) | quote }}
@@ -17,19 +17,19 @@
       failed_when: false
       no_log: true
 
-    - name: Read the current SELinux enforcement mode
+    - name: pull-audit-logs | Read the current SELinux enforcement mode
       ansible.builtin.command:
         argv: [getenforce]
       register: auditlogs_selinux
       changed_when: false
       failed_when: false
 
-    - name: Extract bounded facts instead of publishing raw audit stdout
+    - name: pull-audit-logs | Extract bounded facts instead of publishing raw audit stdout
       ansible.builtin.set_fact:
         auditlogs_compact_facts: "{{ lookup('ansible.builtin.template', 'compact-facts.json.j2') | from_json }}"
       no_log: true
 
-    - name: Publish compact facts for downstream RCA
+    - name: pull-audit-logs | Publish compact facts for downstream RCA
       ansible.builtin.set_stats:
         data:
           affected_host_facts: "{{ auditlogs_compact_facts | to_json(ensure_ascii=false, separators=[',', ':']) }}"

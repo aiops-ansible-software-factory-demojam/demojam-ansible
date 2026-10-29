@@ -1,12 +1,12 @@
 ---
-- name: Launch or remove the RHEL webapp VM
+- name: webapp-launch | Launch or remove the RHEL webapp VM
   hosts: "{{ host | default('openshift_clusters') }}"
   connection: local
   gather_facts: false
   vars_files:
     - ../../group_vars/openshift_clusters/webapp.yml
   tasks:
-    - name: Validate the demo workload inputs
+    - name: webapp-launch | Validate the demo workload inputs
       ansible.builtin.assert:
         that:
           - webapp_vm_namespace == 'webapp-vms'
@@ -15,7 +15,7 @@
           - webapp_ssh_public_key | length > 0
         fail_msg: Bootstrap the VM credential before launching the webapp.
 
-    - name: Remove the VM and its owned disk
+    - name: webapp-launch | Remove the VM and its owned disk
       redhat.openshift_virtualization.kubevirt_vm:
         name: "{{ webapp_vm_name }}"
         namespace: "{{ webapp_vm_namespace }}"
@@ -26,7 +26,7 @@
         wait_timeout: 900
       when: webapp_vm_state == 'absent'
 
-    - name: Provision a RHEL 9 VM from the cluster DataSource
+    - name: webapp-launch | Provision a RHEL 9 VM from the cluster DataSource
       redhat.openshift_virtualization.kubevirt_vm:
         name: "{{ webapp_vm_name }}"
         namespace: "{{ webapp_vm_namespace }}"
@@ -59,23 +59,23 @@
                 memory: 2Gi
             devices:
               disks:
-                - name: rootdisk
+                - name: webapp-launch | rootdisk
                   disk:
                     bus: virtio
-                - name: cloudinitdisk
+                - name: webapp-launch | cloudinitdisk
                   disk:
                     bus: virtio
               interfaces:
-                - name: default
+                - name: webapp-launch | default
                   masquerade: {}
           networks:
-            - name: default
+            - name: webapp-launch | default
               pod: {}
           volumes:
-            - name: rootdisk
+            - name: webapp-launch | rootdisk
               dataVolume:
                 name: webapp-rootdisk
-            - name: cloudinitdisk
+            - name: webapp-launch | cloudinitdisk
               cloudInitNoCloud:
                 userData: "#cloud-config\n{{ webapp_user_data | to_nice_yaml }}"
         wait: true

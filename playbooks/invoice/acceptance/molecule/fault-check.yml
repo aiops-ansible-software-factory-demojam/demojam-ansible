@@ -1,17 +1,17 @@
 ---
-- name: Verify a failed canary stopped the rollout
+- name: fault-check | Verify a failed canary stopped the rollout
   hosts: molecule
   become: true
   gather_facts: false
   vars:
     acceptance_material: "{{ lookup('ansible.builtin.file', lookup('ansible.builtin.env', 'INVOICE_MATERIAL_FILE')) | from_json }}"
   tasks:
-    - name: Read the release link after failed activation
+    - name: fault-check | Read the release link after failed activation
       ansible.builtin.stat:
         path: /opt/invoice-portal/current
       register: acceptance_link
 
-    - name: Require restoration on the canary and no promotion on its follower
+    - name: fault-check | Require restoration on the canary and no promotion on its follower
       ansible.builtin.assert:
         that:
           - acceptance_link.stat.islnk

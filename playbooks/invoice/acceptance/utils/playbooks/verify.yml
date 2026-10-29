@@ -1,17 +1,17 @@
 ---
-- name: Verify test host connectivity and operating systems
+- name: verify | Verify test host connectivity and operating systems
   hosts: molecule
   gather_facts: false
   tasks:
-    - name: Instance answers over Ansible connection
+    - name: verify | Instance answers over Ansible connection
       ansible.builtin.ping:
 
-    - name: Read the guest operating system
+    - name: verify | Read the guest operating system
       ansible.builtin.setup:
         gather_subset:
           - distribution
 
-    - name: Verify the golden image guest matches its inventory host
+    - name: verify | Verify the golden image guest matches its inventory host
       ansible.builtin.assert:
         that:
           - ansible_facts['distribution'] == molecule_expected_distribution

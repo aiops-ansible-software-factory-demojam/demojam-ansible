@@ -1,23 +1,23 @@
 ---
-- name: Manage read-only MCP diagnostics on the RHEL webapp
+- name: mcp-install | Manage read-only MCP diagnostics on the RHEL webapp
   hosts: webapps
   become: true
   gather_facts: true
   vars_files:
     - ../../group_vars/webapps.yml
   handlers:
-    - name: Reload audit configuration
+    - name: mcp-install | Reload audit configuration
       # RHEL requires the service command for auditd signal handling.
       ansible.builtin.command:
         argv: [service, auditd, reload]
       changed_when: true
-    - name: Restart webapp MCP
+    - name: mcp-install | Restart webapp MCP
       ansible.builtin.systemd_service:
         name: webapp-mcp
         daemon_reload: true
         state: restarted
   tasks:
-    - name: Require the supported guest and lifecycle state
+    - name: mcp-install | Require the supported guest and lifecycle state
       ansible.builtin.assert:
         that:
           - ansible_facts['distribution'] in ['RedHat', 'CentOS', 'Rocky']
@@ -26,7 +26,7 @@
           - webapp_mcp_state | default('present') in ['present', 'absent']
         fail_msg: Webapp MCP supports RHEL-compatible x86_64 guests with Python 3.12.
 
-    - name: Validate bootstrap-supplied service material before changing the host
+    - name: mcp-install | Validate bootstrap-supplied service material before changing the host
       when: webapp_mcp_state | default('present') == 'present'
       ansible.builtin.assert:
         that:
@@ -40,24 +40,24 @@
           - webapp_mcp_material_lookup.ca_cert | length > 0
       no_log: true
 
-    - name: Discover installed services
+    - name: mcp-install | Discover installed services
       ansible.builtin.service_facts:
 
-    - name: Stop the retired audit refresh timer
+    - name: mcp-install | Stop the retired audit refresh timer
       ansible.builtin.systemd_service:
         name: webapp-mcp-audit.timer
         enabled: false
         state: stopped
       when: "'webapp-mcp-audit.service' in ansible_facts['services']"
 
-    - name: Stop the retired audit collector
+    - name: mcp-install | Stop the retired audit collector
       ansible.builtin.systemd_service:
         name: webapp-mcp-audit.service
         enabled: false
         state: stopped
       when: "'webapp-mcp-audit.service' in ansible_facts['services']"
 
-    - name: Remove the retired collector and authentication adapter
+    - name: mcp-install | Remove the retired collector and authentication adapter
       ansible.builtin.file:
         path: "{{ item }}"
         state: absent
@@ -69,38 +69,38 @@
         - /opt/webapp-mcp/webapp_mcp_audit.py
         - /etc/webapp-mcp/credential.json
 
-    - name: Stop diagnostics when disabled
+    - name: mcp-install | Stop diagnostics when disabled
       when: webapp_mcp_state | default('present') == 'absent'
       block:
-        - name: Stop and disable the installed diagnostics service
+        - name: mcp-install | Stop and disable the installed diagnostics service
           ansible.builtin.systemd_service:
             name: webapp-mcp
             daemon_reload: true
             enabled: false
             state: stopped
           when: "'webapp-mcp.service' in ansible_facts['services']"
-        - name: Restore root-only audit log rotation
+        - name: mcp-install | Restore root-only audit log rotation
           ansible.builtin.lineinfile:
             path: /etc/audit/auditd.conf
             regexp: '^log_group\s*='
             line: log_group = root
           when: "'auditd.service' in ansible_facts['services']"
           notify: Reload audit configuration
-        - name: Restore root-only audit file access
+        - name: mcp-install | Restore root-only audit file access
           ansible.builtin.file:
             path: /var/log/audit/audit.log
             owner: root
             group: root
             mode: '0600'
           when: "'auditd.service' in ansible_facts['services']"
-        - name: Restore root-only audit directory access
+        - name: mcp-install | Restore root-only audit directory access
           ansible.builtin.file:
             path: /var/log/audit
             owner: root
             group: root
             mode: '0700'
           when: "'auditd.service' in ansible_facts['services']"
-        - name: Close the diagnostics firewall port
+        - name: mcp-install | Close the diagnostics firewall port
           ansible.posix.firewalld:
             port: 8443/tcp
             state: disabled
@@ -108,15 +108,15 @@
             immediate: true
             offline: true
           when: "'firewalld.service' in ansible_facts['services']"
-        - name: Remove guest authentication and TLS material
+        - name: mcp-install | Remove guest authentication and TLS material
           ansible.builtin.file:
             path: /etc/webapp-mcp
             state: absent
 
-    - name: Install and configure diagnostics
+    - name: mcp-install | Install and configure diagnostics
       when: webapp_mcp_state | default('present') == 'present'
       block:
-        - name: Install the isolated runtime and diagnostic command dependencies
+        - name: mcp-install | Install the isolated runtime and diagnostic command dependencies
           ansible.builtin.package:
             name:
               - python3.12
@@ -134,12 +134,12 @@
               - firewalld
             state: present
 
-        - name: Create the diagnostics group
+        - name: mcp-install | Create the diagnostics group
           ansible.builtin.group:
             name: mcpdiag
             system: true
 
-        - name: Create an unprivileged diagnostics account
+        - name: mcp-install | Create an unprivileged diagnostics account
           ansible.builtin.user:
             name: mcpdiag
             group: mcpdiag
@@ -149,7 +149,7 @@
             create_home: false
             shell: /sbin/nologin
 
-        - name: Create root-owned application and configuration directories
+        - name: mcp-install | Create root-owned application and configuration directories
           ansible.builtin.file:
             path: "{{ item }}"
             state: directory
@@ -158,7 +158,7 @@
             mode: '0750'
           loop: [/opt/webapp-mcp, /etc/webapp-mcp]
 
-        - name: Create the daemon log directory
+        - name: mcp-install | Create the daemon log directory
           ansible.builtin.file:
             path: /var/log/webapp-mcp
             state: directory
@@ -166,7 +166,7 @@
             group: mcpdiag
             mode: '0700'
 
-        - name: Install the hashed dependency lock
+        - name: mcp-install | Install the hashed dependency lock
           ansible.builtin.copy:
             src: webapp-mcp-requirements.txt
             dest: /opt/webapp-mcp/requirements.txt
@@ -175,7 +175,7 @@
             mode: '0644'
           notify: Restart webapp MCP
 
-        - name: Install verified Python dependencies in a dedicated environment
+        - name: mcp-install | Install verified Python dependencies in a dedicated environment
           ansible.builtin.pip:
             requirements: /opt/webapp-mcp/requirements.txt
             virtualenv: /opt/webapp-mcp/venv
@@ -183,12 +183,12 @@
             extra_args: '--require-hashes --only-binary=:all:'
           notify: Restart webapp MCP
 
-        - name: Read the system CA bundle for issuer verification
+        - name: mcp-install | Read the system CA bundle for issuer verification
           ansible.builtin.slurp:
             src: /etc/pki/tls/certs/ca-bundle.crt
           register: webapp_mcp_system_ca
 
-        - name: Install public JWT trust and TLS material
+        - name: mcp-install | Install public JWT trust and TLS material
           ansible.builtin.copy:
             dest: "/etc/webapp-mcp/{{ item.name }}"
             content: "{{ item.content }}"
@@ -196,18 +196,18 @@
             group: mcpdiag
             mode: '0640'
           loop:
-            - name: jwt-ca.crt
+            - name: mcp-install | jwt-ca.crt
               content: "{{ webapp_mcp_system_ca.content | b64decode }}\n{{ webapp_mcp_material_lookup.jwt_ca }}"
-            - name: tls.crt
+            - name: mcp-install | tls.crt
               content: "{{ webapp_mcp_material_lookup.tls_cert }}"
-            - name: tls.key
+            - name: mcp-install | tls.key
               content: "{{ webapp_mcp_material_lookup.tls_key }}"
-            - name: ca.crt
+            - name: mcp-install | ca.crt
               content: "{{ webapp_mcp_material_lookup.ca_cert }}"
           no_log: true
           notify: Restart webapp MCP
 
-        - name: Configure the service and authorization policy
+        - name: mcp-install | Configure the service and authorization policy
           ansible.builtin.template:
             src: "{{ item.src }}"
             dest: "{{ item.dest }}"
@@ -223,7 +223,7 @@
               dest: /etc/systemd/system/webapp-mcp.service
           notify: Restart webapp MCP
 
-        - name: Allow diagnostics to traverse the nginx log directory
+        - name: mcp-install | Allow diagnostics to traverse the nginx log directory
           ansible.posix.acl:
             path: /var/log/nginx
             entity: mcpdiag
@@ -231,7 +231,7 @@
             permissions: rx
             state: present
 
-        - name: Preserve diagnostic read access for new nginx logs
+        - name: mcp-install | Preserve diagnostic read access for new nginx logs
           ansible.posix.acl:
             path: /var/log/nginx
             entity: mcpdiag
@@ -240,7 +240,7 @@
             default: true
             state: present
 
-        - name: Allow reading the selected existing nginx logs
+        - name: mcp-install | Allow reading the selected existing nginx logs
           ansible.posix.acl:
             path: "/var/log/nginx/{{ item }}"
             entity: mcpdiag
@@ -249,34 +249,34 @@
             state: present
           loop: [access.log, error.log]
 
-        - name: Configure read access for auditd-created logs
+        - name: mcp-install | Configure read access for auditd-created logs
           ansible.builtin.lineinfile:
             path: /etc/audit/auditd.conf
             regexp: '^log_group\s*='
             line: log_group = mcpdiag
           notify: Reload audit configuration
 
-        - name: Allow diagnostics to traverse the audit directory
+        - name: mcp-install | Allow diagnostics to traverse the audit directory
           ansible.builtin.file:
             path: /var/log/audit
             owner: root
             group: mcpdiag
             mode: '0750'
 
-        - name: Enable native audit logging
+        - name: mcp-install | Enable native audit logging
           ansible.builtin.systemd_service:
             name: auditd
             enabled: true
             state: started
 
-        - name: Allow diagnostics to read the current audit log
+        - name: mcp-install | Allow diagnostics to read the current audit log
           ansible.builtin.file:
             path: /var/log/audit/audit.log
             owner: root
             group: mcpdiag
             mode: '0640'
 
-        - name: Preserve HTTP and SSH while opening diagnostics before firewall startup
+        - name: mcp-install | Preserve HTTP and SSH while opening diagnostics before firewall startup
           ansible.posix.firewalld:
             port: "{{ item }}/tcp"
             state: enabled
@@ -285,23 +285,23 @@
             offline: true
           loop: [22, 80, 8443]
 
-        - name: Enable the guest firewall with the approved ports configured
+        - name: mcp-install | Enable the guest firewall with the approved ports configured
           ansible.builtin.systemd_service:
             name: firewalld
             enabled: true
             state: started
 
-        - name: Apply pending service configuration
+        - name: mcp-install | Apply pending service configuration
           ansible.builtin.meta: flush_handlers
 
-        - name: Enable the diagnostics service
+        - name: mcp-install | Enable the diagnostics service
           ansible.builtin.systemd_service:
             name: webapp-mcp
             daemon_reload: true
             enabled: true
             state: started
 
-        - name: Verify the guest TLS listener rejects unauthenticated requests
+        - name: mcp-install | Verify the guest TLS listener rejects unauthenticated requests
           ansible.builtin.uri:
             url: https://localhost:8443/mcp
             ca_path: /etc/webapp-mcp/ca.crt

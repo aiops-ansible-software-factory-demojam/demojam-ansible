@@ -14,10 +14,7 @@
   sources, demo job templates, EDA configuration, and gateway authentication. Inventory resolves
   runtime material from the dispatch environment under secure logging. Never
   commit secret values or generate/rotate the source key material here.
-- Use Red Hat ee-supported-rhel9 for playbook syntax checks. Run Ansible lint
-  in the development tools environment. Project requirements install public
-  Galaxy CaC and the public Git demo collection;
-  certified dependencies come from the supported image. There is no repository-hosted
+- Use Red Hat ee-supported-rhel9 for playbook syntax checks. Run `ansible-lint --profile production` from the repo root in the development tools environment (`.ansible-lint` excludes installed collections under `.ansible/`; OpenShift Virtualization modules are mocked for local lint). Root `requirements.yml` installs public Galaxy collections and demo application collections from Git; in the demo cluster, swap Git URLs for on-cluster Forgejo mirrors. There is no repository-hosted
   CI runner. Python independent acceptance runs in AAP and publishes its protected
   status; nginx uses independent operator validation before merge/recovery.
 - Write block-style YAML with FQCNs and named plays/tasks. Inventory carries

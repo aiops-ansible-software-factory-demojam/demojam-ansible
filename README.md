@@ -28,18 +28,19 @@ after populating its root `.env` and supplying `aap_manifest.zip`.
    running VMs. Source credentials and VM SSH identity survive reruns.
 
 There is no custom AAP image build or Automation Hub token. Root `requirements.yml`
-installs `infra.aap_configuration` from public Galaxy and both application collections from
-public Forgejo Git on project updates. Controller's isolated collection cache
-cannot see the supported image's collection path during installation, so
-`type: dir` entries copy CaC's certified dependencies from that image into the
-cache. They require no downloads or Hub authentication. The supported image
-already contains the Virtualization and AWS collections and the required Python/system packages.
+installs `infra.aap_configuration` from public Galaxy, certified controller
+collections from Galaxy, and both application collections from Git. Controller's
+isolated collection cache cannot rely on the supported image's collection path
+during project installation, so Galaxy satisfies those dependencies without Hub
+authentication. The supported image already contains the Virtualization and AWS
+collections and the required Python/system packages.
 
-SCM and Git collection URLs use `http://forgejo.forgejo.svc.cluster.local:3000`.
-They are reachable from AAP project updates and execution pods, without
-Forgejo authentication. For local development outside the cluster, use the supported EE and replace
-that hostname with your Forgejo Route or use a port forward. No Hub or Forgejo
-token is required for project requirements.
+Git collection URLs default to the public GitHub mirrors listed in each
+collection's `galaxy.yml`. In the demo cluster, replace those entries with
+`http://forgejo.forgejo.svc.cluster.local:3000/demo-owner/...` URLs so project
+updates stay on-cluster without Forgejo authentication. For local development
+outside the cluster, use the supported EE or install collections from the sibling
+monorepo checkouts under `demojam/`.
 
 Dispatch reconciles runtime credential objects using the persistent material
 supplied by bootstrap. Rerun `make aap-configure` to refresh the foundation,

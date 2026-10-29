@@ -1,15 +1,15 @@
 ---
-- name: Open a collection issue for a webapp availability alert
+- name: webapp-alert-issue | Open a collection issue for a webapp availability alert
   hosts: aap
   connection: local
   gather_facts: false
   tasks:
-    - name: Load the issue destination and credential lookup
+    - name: webapp-alert-issue | Load the issue destination and credential lookup
       ansible.builtin.include_vars:
         file: ../../group_vars/aap/webapp_issue.yml
       no_log: true
 
-    - name: Validate the incoming Alertmanager notification
+    - name: webapp-alert-issue | Validate the incoming Alertmanager notification
       ansible.builtin.assert:
         that:
           - alert_payload is defined
@@ -21,21 +21,21 @@
           - demo_issue.credentials.token_lookup | length > 0
       no_log: true
 
-    - name: Select the firing webapp alerts
+    - name: webapp-alert-issue | Select the firing webapp alerts
       ansible.builtin.set_fact:
         demo_firing_alerts: >-
           {{ alert_payload.alerts | selectattr('status', 'equalto', 'firing') |
              selectattr('labels.alertname', 'equalto', 'WebappDown') |
              selectattr('labels.namespace', 'equalto', 'blackbox-exporter') | list }}
 
-    - name: Require a firing webapp alert in the notification
+    - name: webapp-alert-issue | Require a firing webapp alert in the notification
       ansible.builtin.assert:
         that:
           - demo_firing_alerts | length > 0
 
     # A single non-concurrent template serializes deliveries. The first open
     # issue with the marker is reused even when Alertmanager sends repeats.
-    - name: Read existing open outage issues
+    - name: webapp-alert-issue | Read existing open outage issues
       ansible.builtin.uri:
         url: >-
           {{ demo_issue.api_url }}/repos/{{ demo_issue.repository }}/issues?state=open&type=issues&limit=50&q={{ demo_issue.title | urlencode }}
@@ -47,14 +47,14 @@
       register: demo_open_issues
       no_log: true
 
-    - name: Find the existing open incident
+    - name: webapp-alert-issue | Find the existing open incident
       ansible.builtin.set_fact:
         demo_existing_issues: >-
           {{ demo_open_issues.json | selectattr('body', 'defined') |
              selectattr('body', 'search', demo_issue.marker) | list }}
       no_log: true
 
-    - name: Open an issue when no matching incident is open
+    - name: webapp-alert-issue | Open an issue when no matching incident is open
       ansible.builtin.uri:
         url: "{{ demo_issue.api_url }}/repos/{{ demo_issue.repository }}/issues"
         method: POST
@@ -83,14 +83,14 @@
       changed_when: true
       no_log: true
 
-    - name: Select the incident URL
+    - name: webapp-alert-issue | Select the incident URL
       ansible.builtin.set_fact:
         demo_incident_url: >-
           {{ (demo_existing_issues | first).html_url if demo_existing_issues | length > 0
              else demo_created_issue.json.html_url }}
       no_log: true
 
-    - name: Publish the incident URL as a job artifact
+    - name: webapp-alert-issue | Publish the incident URL as a job artifact
       ansible.builtin.set_stats:
         data:
           issue_url: "{{ demo_incident_url }}"
