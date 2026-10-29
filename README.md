@@ -275,7 +275,7 @@ The optional invoice scenario is configured by
 `playbooks/aap/configure-invoice.yml` and vars files under
 `vars/invoice`. AAP resource definitions are applied through the pinned
 `infra.aap_configuration.dispatch` role. Application settings live in the
-collection's `vars/invoice.yml`, consumed directly by `python_application`. It adds application observation, deduplicated
+collection's `roles/python_application/vars/invoice.yml`, consumed directly by `python_application`. It adds application observation, deduplicated
 security issues, independent validation using a scoped EC2 test identity, and
 production workflows bound to a successfully tested collection SHA.
 The Forgejo EDA rule dispatches only newly opened invoice incidents to the
@@ -295,7 +295,7 @@ the missing-inventory failure and check that the isolated inventory fixes it.
 
 Before provisioning test guests, the validator runs the trusted acceptance source
 contract against the exact candidate checkout. This exercises Ansible's variable
-precedence and checks that rollback baseline preparation reads `files/invoice`
+precedence and checks that rollback baseline preparation reads `roles/invoice/files/invoice`
 from that collection. The acceptance task supplies its source override at task
 scope so the application's vars file cannot redirect it to the acceptance directory.
 Run `python3 -m unittest discover -s tests -p test_invoice_acceptance_source.py -v`

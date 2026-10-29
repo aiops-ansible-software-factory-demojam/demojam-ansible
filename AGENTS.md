@@ -4,7 +4,7 @@
   `playbooks/aap/configure-aap.yml` and `infra.aap_configuration.dispatch`.
   Invoice platform and release resources are scoped vars files under `vars/invoice/`,
   applied by `playbooks/aap/configure-invoice.yml` through the same dispatcher.
-  Application details belong in the collection's `vars/invoice.yml`, not inventory
+  Application details belong in the collection's `roles/python_application/vars/invoice.yml`, not inventory
   or an application wrapper role.
 - Bootstrap exclusively owns the demo organization, demo-aap-ee, public
   demojam-ansible project, base demo-inventory and aap group/host,
