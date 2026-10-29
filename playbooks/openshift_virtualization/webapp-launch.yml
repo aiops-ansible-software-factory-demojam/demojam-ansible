@@ -4,7 +4,7 @@
   connection: local
   gather_facts: false
   vars_files:
-    - ../../group_vars/openshift_clusters/webapp.yml
+    - ../../inventory/group_vars/openshift_clusters/webapp.yml
   tasks:
     - name: Validate the demo workload inputs
       ansible.builtin.assert:

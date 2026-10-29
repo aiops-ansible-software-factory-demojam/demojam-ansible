@@ -4,7 +4,7 @@
   connection: local
   gather_facts: false
   vars_files:
-    - ../../vars/invoice/orchestration.yml
+    - vars/orchestration.yml
   vars:
     invoice_response_material: '{{ lookup("ansible.builtin.file", lookup("ansible.builtin.env", "INVOICE_MATERIAL_FILE")) | from_json }}'
     invoice_issue_url: 'http://forgejo.forgejo.svc.cluster.local:3000/api/v1/repos/{{ invoice_response_material.profile.application.repository }}/issues'

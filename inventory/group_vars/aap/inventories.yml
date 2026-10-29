@@ -9,7 +9,7 @@ demo_controller_inventory_sources:
     inventory: demo-inventory
     source: scm
     source_project: demojam-ansible
-    source_path: inventory.yml
+    source_path: inventory/hosts.yml
     overwrite: true
     overwrite_vars: true
     update_on_launch: true
@@ -22,7 +22,7 @@ demo_controller_inventory_sources:
     inventory: demo-inventory
     source: scm
     source_project: demojam-ansible
-    source_path: "{{ 'dynamic/webapp.aws_ec2.yml' if demo_backend == 'aws' else 'dynamic/openshift-virtualization.kubevirt.yml' }}"
+    source_path: "{{ 'inventory/webapp.aws_ec2.yml' if demo_backend == 'aws' else 'inventory/openshift-virtualization.kubevirt.yml' }}"
     credential: "{{ 'demo-aws-guest' if demo_backend == 'aws' else 'demo-virtualmachine-admin' }}"
     execution_environment: demo-aap-ee
     overwrite: true
@@ -38,7 +38,7 @@ demo_pythonapp_inventory_sources:
     inventory: demo-inventory
     source: scm
     source_project: demojam-ansible
-    source_path: dynamic/pythonapp.aws_ec2.yml
+    source_path: inventory/pythonapp.aws_ec2.yml
     credential: demo-aws-guest
     execution_environment: demo-aap-ee
     overwrite: true

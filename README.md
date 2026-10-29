@@ -1,8 +1,24 @@
 # demojam-ansible
 
-This public Forgejo repository follows the homelab `group_vars/aap` and
+This public Forgejo repository follows the homelab `inventory/group_vars/aap` and
 `infra.aap_configuration.dispatch` model. Inventory, AAP object definitions,
 and VM/webapp playbooks share one project. No SCM credential is required.
+
+## Repository layout
+
+| Path | Purpose |
+| --- | --- |
+| `inventory/hosts.yml` | Static AAP and OpenShift control hosts; default in `ansible.cfg` |
+| `inventory/group_vars/` | Variables for AAP, OpenShift and the separate application groups |
+| `inventory/*.aws_ec2.yml` | AWS inventory plugins scoped to webapp or Python application hosts |
+| `inventory/openshift-virtualization.kubevirt.yml` | OpenShift Virtualization inventory plugin |
+| `playbooks/invoice/vars/` | Invoice factory, platform and release-orchestration variables |
+
+AAP selects explicit source files for the requested backend. Keeping static and
+plugin sources beside `group_vars` preserves Ansible's automatic group-variable
+loading. The default inventory loads only `inventory/hosts.yml`; dynamic sources
+are selected by AAP's inventory-source configuration. The previous `dynamic/`
+directory contained these plugin configurations, rather than executable scripts.
 
 ## Bootstrap boundary
 
@@ -19,7 +35,7 @@ after populating its root `.env` and supplying `aap_manifest.zip`.
    `aap_configure_all`. It waits for the public project sync, then launches
    configuration inside AAP. No Resource Operator CRs or connection token
    are needed.
-3. `group_vars/aap` and `infra.aap_configuration.dispatch` exclusively own
+3. `inventory/group_vars/aap` and `infra.aap_configuration.dispatch` exclusively own
    the VM/SSH/RHEL credential types and credentials, SCM inventory sources,
    demo job templates, and EDA credentials/project/decision environment. Gateway OIDC configuration uses the supported
    `ansible.platform` modules. Runtime values arrive through the dispatch
@@ -61,7 +77,7 @@ times out, the job fails with a synchronization message before applying
 config-as-code objects. Check EDA worker health and gateway synchronization,
 then rerun `make aap-configure`.
 
-`group_vars/aap/oidc.yml` defines the independent demo Keycloak authenticator
+`inventory/group_vars/aap/oidc.yml` defines the independent demo Keycloak authenticator
 and access maps. Bootstrap adds `DEMO_OIDC_ISSUER` and
 `DEMO_OIDC_CLIENT_SECRET` to the runtime dispatch credential; these values
 are required when running `configure-aap.yml`. The supported EE's
@@ -132,7 +148,7 @@ fixture snapshots.
 
 ## Webapp outage issues
 
-`group_vars/aap/eda.yml` configures the authenticated Alertmanager event stream
+`inventory/group_vars/aap/eda.yml` configures the authenticated Alertmanager event stream
 and activation. The supported `ansible.eda` modules apply the static stream
 UUID and activation source mapping after dispatch. Project updates restart the
 activation so updated rulebooks take effect.
@@ -146,7 +162,7 @@ is unavailable, then uses text-only RCA. One completed diagnosis reaches
 `webapp_alert_issue` with the original alert.
 The workflow and the policy allowing AAP to reach AO are in openshift-gitops.
 
-The issue destination is fixed in `group_vars/aap/webapp_issue.yml`: Forgejo collection repository
+The issue destination is fixed in `inventory/group_vars/aap/webapp_issue.yml`: Forgejo collection repository
 `demo-owner/ansible-collection-demo.webapp`. Its credential injects `FORGEJO_API_TOKEN`
 only into the issue job. Existing open outage issues are reused; template
 execution is serialized. Resolved notifications do not close issues.
@@ -273,7 +289,7 @@ after a test-gated merge, with SELinux still enforcing.
 
 The optional invoice scenario is configured by
 `playbooks/aap/configure-invoice.yml` and vars files under
-`vars/invoice`. AAP resource definitions are applied through the pinned
+`playbooks/invoice/vars`. AAP resource definitions are applied through the pinned
 `infra.aap_configuration.dispatch` role. Application settings live in the
 collection's `roles/python_application/vars/invoice.yml`, consumed directly by `python_application`. It adds application observation, deduplicated
 security issues, independent validation using a scoped EC2 test identity, and

@@ -14,7 +14,7 @@ ansible:
   executor:
     args:
       ansible_playbook:
-        - --inventory=${MOLECULE_PROJECT_DIRECTORY}/inventory.yml
+        - --inventory=${MOLECULE_PROJECT_DIRECTORY}/inventory/hosts.yml
         - --inventory=${MOLECULE_PROJECT_DIRECTORY}/molecule/playbook-webapp-mcp/inventory/
         - --inventory=${MOLECULE_EPHEMERAL_DIRECTORY}/inventory/
   playbooks:

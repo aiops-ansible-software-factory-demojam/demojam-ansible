@@ -4,7 +4,7 @@
   become: true
   gather_facts: true
   vars_files:
-    - ../../group_vars/webapps.yml
+    - ../../inventory/group_vars/webapps.yml
   handlers:
     - name: Reload audit configuration
       # RHEL requires the service command for auditd signal handling.

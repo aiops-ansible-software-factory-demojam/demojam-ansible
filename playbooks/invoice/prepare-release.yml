@@ -4,7 +4,7 @@
   connection: local
   gather_facts: false
   vars_files:
-    - ../../vars/invoice/orchestration.yml
+    - vars/orchestration.yml
   vars:
     invoice_candidate_sha: '{{ invoice_release_contract.source_revision | default("") }}'
     invoice_validation_job_id: '{{ invoice_release_contract.validation_job_id | default(0) }}'

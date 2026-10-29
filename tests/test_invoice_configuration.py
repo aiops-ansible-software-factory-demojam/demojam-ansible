@@ -36,11 +36,11 @@ class InvoiceCredentialTests(unittest.TestCase):
         })
         self.environment.start()
         self.addCleanup(self.environment.stop)
-        variables = yaml.safe_load((ROOT / "vars/invoice/factory.yml").read_text())
+        variables = yaml.safe_load((ROOT / "playbooks/invoice/vars/factory.yml").read_text())
         self.templater = Templar(loader=DataLoader(), variables=variables)
         play = yaml.load((ROOT / "playbooks/aap/configure-invoice.yml").read_text(), Loader=InventoryLoader)[0]
         self.tasks = play["tasks"]
-        self.platform = yaml.load((ROOT / "vars/invoice/platform.yml").read_text(), Loader=InventoryLoader)
+        self.platform = yaml.load((ROOT / "playbooks/invoice/vars/platform.yml").read_text(), Loader=InventoryLoader)
 
     def test_artifact_credential_contains_json_text(self):
         credential = next(c for c in self.platform["invoice_platform_controller_credentials"] if c["name"] == "demo-invoice-artifacts")
@@ -58,7 +58,7 @@ class InvoiceCredentialTests(unittest.TestCase):
         self.assertEqual(inputs["root_volume_size"], "30")
 
     def test_release_resources_are_reused_instead_of_generated_per_commit(self):
-        self.assertFalse((ROOT / 'vars/invoice/release.yml').exists())
+        self.assertFalse((ROOT / 'playbooks/invoice/vars/release.yml').exists())
         names = [t['name'] for t in self.platform['invoice_platform_controller_templates']]
         self.assertEqual(names.count('invoice_deploy'), 1)
         self.assertEqual(names.count('invoice_prepare_release'), 1)

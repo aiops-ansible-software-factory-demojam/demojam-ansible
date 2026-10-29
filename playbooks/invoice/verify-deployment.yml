@@ -4,7 +4,7 @@
   connection: local
   gather_facts: false
   vars_files:
-    - ../../vars/invoice/orchestration.yml
+    - vars/orchestration.yml
   tasks:
     - name: Require an exact release and workflow identity
       ansible.builtin.assert:

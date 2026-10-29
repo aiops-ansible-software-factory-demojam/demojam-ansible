@@ -60,7 +60,7 @@ class CVEResponseTests(unittest.TestCase):
             material = Path(tmp) / 'material.json'; material.write_text(json.dumps(self.material))
             output = Path(tmp) / 'result.json'
             play = yaml.safe_load((ROOT / 'playbooks/invoice' / filename).read_text())[0]
-            play['vars_files'] = [str(ROOT / 'vars/invoice/orchestration.yml')]
+            play['vars_files'] = [str(ROOT / 'playbooks/invoice/vars/orchestration.yml')]
             for task in play['tasks']:
                 for key in ['ansible.builtin.import_tasks', 'ansible.builtin.include_tasks']:
                     if key in task: task[key] = str(ROOT / 'playbooks/invoice' / task[key])

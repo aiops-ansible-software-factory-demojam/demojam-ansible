@@ -1,8 +1,12 @@
 # Agent guide
 
-- Shared AAP objects are inventory data under `group_vars/aap/`; apply them through
+- Keep static hosts and backend plugin sources together under `inventory/`, beside
+  `inventory/group_vars/`. The default source is `inventory/hosts.yml`; AAP selects
+  an explicit backend plugin file so unrelated sources are not queried.
+
+- Shared AAP objects are inventory data under `inventory/group_vars/aap/`; apply them through
   `playbooks/aap/configure-aap.yml` and `infra.aap_configuration.dispatch`.
-  Invoice platform and release resources are scoped vars files under `vars/invoice/`,
+  Invoice platform and release resources are scoped vars files under `playbooks/invoice/vars/`,
   applied by `playbooks/aap/configure-invoice.yml` through the same dispatcher.
   Application details belong in the collection's `roles/python_application/vars/invoice.yml`, not inventory
   or an application wrapper role.
